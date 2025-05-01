@@ -1,50 +1,88 @@
-# Welcome to your Expo app 👋
+# College Calendar for Desktop
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A beautifully designed, feature-rich calendar application specifically tailored for college students to manage events and homework tasks efficiently. This application is primarily designed for desktop use through the Expo web platform.
 
-## Get started
+![College Calendar Screenshot](screenshots/calendar_screenshot.png)
+*Screenshot would be added after first deployment*
 
-1. Install dependencies
+## Features
 
-   ```bash
-   npm install
-   ```
+### Calendar View
+- Visual calendar interface similar to Google Calendar
+- Easy event creation and management
+- Color-coded events for better organization
 
-2. Start the app
+### Homework Task Management
+- Dedicated system for tracking homework assignments
+- Tasks organized by:
+  - Course (color-coded)
+  - Due date and time
+  - Priority level (High, Medium, Low)
+  - Completion status
+- Ability to add notes to tasks
 
-   ```bash
-   npx expo start
-   ```
+### User Experience
+- Modern, aesthetically pleasing light-mode interface
+- Intuitive navigation between calendar and tasks
+- Search functionality for finding specific tasks
+- Filter tasks by status (All, Today, Upcoming, Completed)
+- Visual indicators for task priority and status
 
-In the output, you'll find options to open the app in a
+## Desktop Screenshots
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+<div align="center">
+  <p><i>Calendar View - Screenshots will be added after first deployment</i></p>
+  <p><i>Task Management - Screenshots will be added after first deployment</i></p>
+</div>
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Technical Details
 
-## Get a fresh project
+This app is built with:
+- React Native / Expo
+- React Navigation
+- AsyncStorage for data persistence
+- Custom UI components and theme system
+- Optimized for desktop web viewing
 
-When you're ready, run:
+## Getting Started
 
-```bash
-npm run reset-project
+### Prerequisites
+- Node.js
+- npm or yarn
+- Expo CLI
+
+### Installation
+
+1. Clone the repository
+```
+git clone https://github.com/yourusername/college-calendar.git
+cd college-calendar
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Install dependencies:
+```
+npm install
+```
 
-## Learn more
+3. Start the development server:
+```
+npm start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+4. Select the web option (press 'w') to open in your desktop browser.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Desktop Usage
 
-## Join the community
+This application is optimized for desktop use. When running the app:
 
-Join our community of developers creating universal apps.
+1. The web interface will automatically open in your default browser
+2. Use the mouse for navigation and task management
+3. The layout is responsive but designed primarily for desktop viewing
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Contributing
+
+Contributions are welcome! See the [CONTRIBUTING.md](.github/CONTRIBUTING.md) file for guidelines.
+
+## License
+
+This project is open source and available under the MIT License.

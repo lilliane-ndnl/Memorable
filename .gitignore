@@ -37,3 +37,48 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# OSX
+.DS_Store
+
+# Expo
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Node
+node_modules/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated files
+.DS_Store
+*.log
+.expo-shared/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Testing
+coverage/
