@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -11,9 +11,10 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES } from '../constants/theme';
+import { COLORS, SHADOWS } from '../constants/theme';
 import { COURSE_COLORS } from '../constants/theme';
 import { formatDate, formatTime } from '../utils/helpers';
+import { loadCoursesFromStorage } from '../utils/courseHelpers';
 
 const PRIORITY_OPTIONS = [
   { label: 'High', value: 'high', color: COLORS.danger },
@@ -21,18 +22,8 @@ const PRIORITY_OPTIONS = [
   { label: 'Low', value: 'low', color: COLORS.success },
 ];
 
-const COURSE_OPTIONS = [
-  { label: 'Math', value: 'math', color: COURSE_COLORS.math },
-  { label: 'Science', value: 'science', color: COURSE_COLORS.science },
-  { label: 'History', value: 'history', color: COURSE_COLORS.history },
-  { label: 'English', value: 'english', color: COURSE_COLORS.english },
-  { label: 'Art', value: 'art', color: COURSE_COLORS.art },
-  { label: 'Computer Science', value: 'cs', color: COURSE_COLORS.cs },
-  { label: 'Business', value: 'business', color: COURSE_COLORS.business },
-];
-
 const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
-  // Initialize state with initial task values or defaults
+  // State for form fields
   const [title, setTitle] = useState(initialTask?.title || '');
   const [course, setCourse] = useState(initialTask?.courseName || '');
   const [dueDate, setDueDate] = useState(
@@ -40,17 +31,57 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
       ? new Date(initialTask.dueDate)
       : new Date()
   );
-  const [dueTime, setDueTime] = useState(
-    initialTask?.dueTime
-      ? new Date(`2000-01-01T${initialTask.dueTime}:00`)
-      : new Date()
-  );
+  const [dueTime, setDueTime] = useState(() => {
+    if (initialTask?.dueTime) {
+      // Parse time string like "10:30 AM" into a Date object
+      const [timePart, ampm] = initialTask.dueTime.split(' ');
+      const [hours, minutes] = timePart.split(':').map(Number);
+      
+      const date = new Date();
+      let hour = hours;
+      
+      // Convert to 24 hour format
+      if (ampm === 'PM' && hours < 12) hour += 12;
+      if (ampm === 'AM' && hours === 12) hour = 0;
+      
+      date.setHours(hour, minutes, 0);
+      return date;
+    }
+    return new Date();
+  });
+  
   const [priority, setPriority] = useState(initialTask?.priority || 'medium');
   const [notes, setNotes] = useState(initialTask?.notes || '');
   
   // Date & Time picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  
+  // Course options from stored courses
+  const [courseOptions, setCourseOptions] = useState(Object.entries(COURSE_COLORS).map(([value, color]) => ({
+    label: value.charAt(0).toUpperCase() + value.slice(1),
+    value,
+    color
+  })));
+  
+  // Load courses from storage
+  useEffect(() => {
+    const loadCourses = async () => {
+      const courses = await loadCoursesFromStorage();
+      if (courses && courses.length > 0) {
+        // Create course options from saved courses
+        const options = courses.map(course => ({
+          label: course.name,
+          value: course.name,
+          color: course.color
+        }));
+        
+        setCourseOptions(options);
+      }
+    };
+    
+    loadCourses();
+  }, []);
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -77,7 +108,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
 
   // Date picker handlers
   const onDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
+    setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       setDueDate(selectedDate);
     }
@@ -85,7 +116,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
 
   // Time picker handlers
   const onTimeChange = (event, selectedTime) => {
-    setShowTimePicker(false);
+    setShowTimePicker(Platform.OS === 'ios');
     if (selectedTime) {
       setDueTime(selectedTime);
     }
@@ -114,8 +145,12 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>Course</Text>
-          <View style={styles.optionsContainer}>
-            {COURSE_OPTIONS.map((option) => (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.courseScrollView}
+          >
+            {courseOptions.map((option) => (
               <TouchableOpacity
                 key={option.value}
                 style={[
@@ -133,7 +168,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
                 <Text style={styles.optionText}>{option.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
         <View style={styles.formRow}>
@@ -173,6 +208,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
               <DateTimePicker
                 value={dueTime}
                 mode="time"
+                is24Hour={false}
                 display="default"
                 onChange={onTimeChange}
               />
@@ -197,14 +233,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
                 onPress={() => setPriority(option.value)}
               >
                 <View style={[styles.priorityDot, { backgroundColor: option.color }]} />
-                <Text 
-                  style={[
-                    styles.priorityText,
-                    priority === option.value && { color: option.color }
-                  ]}
-                >
-                  {option.label}
-                </Text>
+                <Text style={styles.optionText}>{option.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -213,30 +242,30 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Notes (Optional)</Text>
           <TextInput 
-            style={[styles.input, styles.notesInput]}
+            style={[styles.input, styles.textArea]}
             value={notes}
             onChangeText={setNotes}
-            placeholder="Add any additional details..."
+            placeholder="Add any notes or details"
             placeholderTextColor={COLORS.gray}
-            multiline={true}
+            multiline
             numberOfLines={4}
             textAlignVertical="top"
           />
         </View>
 
-        <View style={styles.buttonContainer}>
+        <View style={styles.buttonsContainer}>
           <TouchableOpacity 
-            style={[styles.button, styles.cancelButton]} 
+            style={[styles.button, styles.cancelButton]}
             onPress={onCancel}
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.button, styles.submitButton]} 
+            style={[styles.button, styles.submitButton]}
             onPress={handleSubmit}
           >
             <Text style={styles.submitButtonText}>
-              {initialTask ? 'Update' : 'Add Task'}
+              {initialTask ? 'Update' : 'Add'} Task
             </Text>
           </TouchableOpacity>
         </View>
@@ -248,73 +277,99 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
   },
   scrollContent: {
-    padding: SIZES.medium,
+    padding: 16,
   },
   title: {
-    fontSize: SIZES.extraLarge,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: SIZES.large,
+    fontSize: 24,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 16,
     textAlign: 'center',
   },
   formGroup: {
-    marginBottom: SIZES.medium,
+    marginBottom: 16,
   },
   formRow: {
     flexDirection: 'row',
-    marginBottom: SIZES.medium,
+    marginBottom: 16,
   },
   label: {
-    fontSize: SIZES.medium,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '500',
     color: COLORS.text,
-    marginBottom: SIZES.base,
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: COLORS.lightGray + '50',
-    borderRadius: SIZES.base,
-    padding: SIZES.medium,
-    fontSize: SIZES.font,
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
     color: COLORS.text,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
   },
-  notesInput: {
-    height: 100,
-    textAlignVertical: 'top',
+  textArea: {
+    minHeight: 100,
+    paddingTop: 12,
+  },
+  courseScrollView: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  optionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  colorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  optionText: {
+    fontSize: 14,
+    color: COLORS.text,
   },
   dateTimeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.lightGray + '50',
-    borderRadius: SIZES.base,
-    padding: SIZES.medium,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   dateTimeText: {
-    fontSize: SIZES.font,
+    fontSize: 16,
     color: COLORS.text,
-    marginLeft: SIZES.base,
+    marginLeft: 8,
   },
   priorityOptions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   priorityButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: SIZES.small,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    flex: 1,
     marginHorizontal: 4,
-    borderRadius: SIZES.base,
-    backgroundColor: COLORS.lightGray + '40',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   priorityDot: {
     width: 12,
@@ -322,60 +377,35 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginRight: 6,
   },
-  priorityText: {
-    fontSize: SIZES.small,
-    fontWeight: '500',
-  },
-  optionsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -4,
-  },
-  optionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    margin: 4,
-    borderRadius: SIZES.base,
-  },
-  colorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 6,
-  },
-  optionText: {
-    fontSize: SIZES.small,
-  },
-  buttonContainer: {
+  buttonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: SIZES.large,
+    marginTop: 16,
   },
   button: {
     flex: 1,
-    paddingVertical: SIZES.medium,
-    borderRadius: SIZES.base,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 8,
+    ...SHADOWS.light,
   },
   cancelButton: {
     backgroundColor: COLORS.lightGray,
-    marginRight: 10,
-  },
-  cancelButtonText: {
-    color: COLORS.text,
-    fontSize: SIZES.font,
-    fontWeight: '600',
+    marginRight: 8,
   },
   submitButton: {
     backgroundColor: COLORS.primary,
   },
+  cancelButtonText: {
+    fontSize: 16,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
   submitButtonText: {
+    fontSize: 16,
     color: COLORS.white,
-    fontSize: SIZES.font,
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });
 
