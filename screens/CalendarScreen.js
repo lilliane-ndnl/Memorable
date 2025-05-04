@@ -6,13 +6,16 @@ import {
   TouchableOpacity, 
   FlatList,
   ScrollView,
-  SafeAreaView
+  SafeAreaView,
+  Modal
 } from 'react-native';
 import { Calendar, Agenda } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, SHADOWS } from '../constants/theme';
 import { loadCoursesFromStorage, getCoursesAsMarkedDates } from '../utils/courseHelpers';
+import { loadTasksFromStorage, getTasksAsMarkedDates as getTaskMarks, getTasksForDate } from '../utils/helpers';
+import AddTaskForm from '../components/AddTaskForm';
 
 // View mode constants
 const VIEW_MODES = {
@@ -25,38 +28,69 @@ const VIEW_MODES = {
 const CalendarScreen = () => {
   const navigation = useNavigation();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [events, setEvents] = useState([]);
   const [markedDates, setMarkedDates] = useState({});
   const [viewMode, setViewMode] = useState(VIEW_MODES.MONTH);
   const [courses, setCourses] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   
-  // Load courses
+  // Load data
   useEffect(() => {
-    loadCourses();
-  }, []);
+    loadData();
+  }, [refreshKey]);
   
-  // Update marked dates when courses change
+  // Update marked dates when data changes
   useEffect(() => {
-    if (courses.length > 0) {
-      const courseMarkedDates = getCoursesAsMarkedDates(courses);
-      
-      // Merge with existing marked dates
-      setMarkedDates(prevMarkedDates => ({
-        ...courseMarkedDates,
-        ...prevMarkedDates,
-        [selectedDate]: {
-          ...courseMarkedDates[selectedDate],
-          ...prevMarkedDates[selectedDate],
-          selected: true,
-          selectedColor: COLORS.primary,
-        }
-      }));
-    }
-  }, [courses, selectedDate]);
+    updateMarkedDates();
+  }, [courses, tasks, selectedDate]);
   
-  const loadCourses = async () => {
+  const loadData = async () => {
     const loadedCourses = await loadCoursesFromStorage();
+    const loadedTasks = await loadTasksFromStorage();
     setCourses(loadedCourses);
+    setTasks(loadedTasks);
+  };
+  
+  const updateMarkedDates = () => {
+    // Get course calendar markers
+    const courseMarkedDates = getCoursesAsMarkedDates(courses);
+    
+    // Get task calendar markers
+    const taskMarkedDates = getTaskMarks(tasks, courses);
+    
+    // Merge all markers
+    const mergedDates = {};
+    
+    // Add course markers
+    Object.keys(courseMarkedDates).forEach(date => {
+      mergedDates[date] = courseMarkedDates[date];
+    });
+    
+    // Add task markers
+    Object.keys(taskMarkedDates).forEach(date => {
+      if (!mergedDates[date]) {
+        mergedDates[date] = { dots: [] };
+      } else if (!mergedDates[date].dots) {
+        mergedDates[date].dots = [];
+      }
+      
+      // Merge dots arrays
+      taskMarkedDates[date].dots.forEach(dot => {
+        if (!mergedDates[date].dots.some(d => d.key === dot.key)) {
+          mergedDates[date].dots.push(dot);
+        }
+      });
+    });
+    
+    // Mark the selected date
+    mergedDates[selectedDate] = {
+      ...mergedDates[selectedDate],
+      selected: true,
+      selectedColor: COLORS.primary,
+    };
+    
+    setMarkedDates(mergedDates);
   };
   
   // Change the view mode
@@ -88,11 +122,6 @@ const CalendarScreen = () => {
       default:
         return dateObj.toLocaleDateString('en-US', options);
     }
-  };
-  
-  // Navigate to the courses screen
-  const navigateToCourses = () => {
-    navigation.navigate('Courses');
   };
   
   // Generate time slots for day view
@@ -128,8 +157,20 @@ const CalendarScreen = () => {
       });
     });
     
-    // Here you would also add task events
-    // TODO: Add task events
+    // Add task events
+    const taskEvents = getTasksForDate(tasks, date);
+    taskEvents.forEach(task => {
+      const course = courses.find(c => c.name === task.courseName);
+      dayEvents.push({
+        id: task.id,
+        title: task.title,
+        time: task.dueTime,
+        location: '',
+        color: course?.color || COLORS.primary,
+        type: 'task',
+        task // Store the original task object for reference
+      });
+    });
     
     return dayEvents.sort((a, b) => {
       // Sort by start time
@@ -159,6 +200,13 @@ const CalendarScreen = () => {
     }
     
     return dates;
+  };
+  
+  // Add a new task for the selected date
+  const handleAddTask = (taskData) => {
+    setModalVisible(false);
+    // Refresh data after adding a task (in a real app, you would update the state directly too)
+    setRefreshKey(prev => prev + 1);
   };
   
   // Render day, 3-day, or week view
@@ -194,7 +242,18 @@ const CalendarScreen = () => {
                       {eventsAtTime.map(event => (
                         <TouchableOpacity
                           key={event.id}
-                          style={[styles.eventItem, { backgroundColor: event.color + '20', borderLeftColor: event.color }]}
+                          style={[
+                            styles.eventItem, 
+                            { 
+                              backgroundColor: event.color + '20', 
+                              borderLeftColor: event.color 
+                            }
+                          ]}
+                          onPress={() => {
+                            if (event.type === 'task') {
+                              navigation.navigate('tasks');
+                            }
+                          }}
                         >
                           <Text style={styles.eventTitle}>{event.title}</Text>
                           <Text style={styles.eventTime}>{event.time}</Text>
@@ -220,14 +279,7 @@ const CalendarScreen = () => {
       return (
         <Calendar
           style={styles.calendar}
-          markedDates={{
-            ...markedDates,
-            [selectedDate]: {
-              ...markedDates[selectedDate],
-              selected: true,
-              selectedColor: COLORS.primary,
-            }
-          }}
+          markedDates={markedDates}
           onDayPress={(day) => setSelectedDate(day.dateString)}
           markingType={'multi-dot'}
           theme={{
@@ -258,13 +310,27 @@ const CalendarScreen = () => {
     return (
       <View style={styles.eventSection}>
         <View style={styles.eventHeader}>
-          <Text style={styles.eventTitle}>Events for {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+          <Text style={styles.eventTitle}>
+            Events for {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </Text>
+          <TouchableOpacity 
+            style={styles.addEventButton}
+            onPress={() => setModalVisible(true)}
+          >
+            <Ionicons name="add" size={20} color={COLORS.white} />
+          </TouchableOpacity>
         </View>
         
         {dailyEvents.length === 0 ? (
           <View style={styles.noEvents}>
             <Ionicons name="calendar-outline" size={48} color={COLORS.lightGray} />
             <Text style={styles.noEventsText}>No events for this day</Text>
+            <TouchableOpacity 
+              style={styles.addEventButtonLarge}
+              onPress={() => setModalVisible(true)}
+            >
+              <Text style={styles.addEventButtonText}>Add Assignment</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -273,7 +339,19 @@ const CalendarScreen = () => {
             renderItem={({ item }) => (
               <TouchableOpacity 
                 style={[styles.eventListItem, { borderLeftColor: item.color }]}
+                onPress={() => {
+                  if (item.type === 'task') {
+                    navigation.navigate('tasks');
+                  }
+                }}
               >
+                <View style={styles.eventIcon}>
+                  <Ionicons 
+                    name={item.type === 'course' ? 'school-outline' : 'create-outline'} 
+                    size={20} 
+                    color={item.color} 
+                  />
+                </View>
                 <View style={styles.eventItemContent}>
                   <Text style={styles.eventName}>{item.title}</Text>
                   <Text style={styles.eventTimeText}>{item.time}</Text>
@@ -283,6 +361,11 @@ const CalendarScreen = () => {
                     </Text>
                   )}
                 </View>
+                {item.type === 'task' && (
+                  <View style={styles.taskTag}>
+                    <Text style={styles.taskTagText}>Due</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             )}
             contentContainerStyle={styles.eventList}
@@ -296,12 +379,20 @@ const CalendarScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{getHeaderText()}</Text>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={navigateToCourses}
-        >
-          <Ionicons name="school" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity 
+            style={[styles.headerButton, styles.headerButtonSpace]}
+            onPress={() => navigation.navigate('courses')}
+          >
+            <Ionicons name="school" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => setModalVisible(true)}
+          >
+            <Ionicons name="add" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
       
       <View style={styles.viewModeSelector}>
@@ -377,6 +468,23 @@ const CalendarScreen = () => {
       {renderCalendarView()}
       
       {viewMode === VIEW_MODES.MONTH && renderDailyEvents()}
+      
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <AddTaskForm 
+              onSubmit={handleAddTask} 
+              onCancel={() => setModalVisible(false)}
+              initialTask={{ dueDate: selectedDate }}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -400,10 +508,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.black,
   },
+  headerButtons: {
+    flexDirection: 'row',
+  },
   headerButton: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: COLORS.secondary,
+  },
+  headerButtonSpace: {
+    marginRight: 8,
   },
   viewModeSelector: {
     flexDirection: 'row',
@@ -449,16 +563,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
   },
+  addEventButton: {
+    backgroundColor: COLORS.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   eventList: {
     padding: 16,
   },
   eventListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.white,
     borderRadius: 8,
     marginBottom: 10,
     padding: 12,
     borderLeftWidth: 3,
     ...SHADOWS.light,
+  },
+  eventIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   eventItemContent: {
     flex: 1,
@@ -478,6 +611,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.gray,
   },
+  taskTag: {
+    backgroundColor: COLORS.primary + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  taskTagText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
   noEvents: {
     flex: 1,
     justifyContent: 'center',
@@ -488,6 +633,19 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: COLORS.gray,
+    marginBottom: 16,
+  },
+  addEventButtonLarge: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    ...SHADOWS.light,
+  },
+  addEventButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
   },
   // Multi-day view styles
   multiDayContainer: {
@@ -563,6 +721,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.gray,
     fontStyle: 'italic',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    marginTop: 50,
+    ...SHADOWS.dark,
   },
 });
 

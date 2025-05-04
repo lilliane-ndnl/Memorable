@@ -1,12 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 
+// Task storage key
+const TASKS_STORAGE_KEY = '@memorable_tasks';
+
 // Generate a unique ID for tasks and events
 export const generateUniqueId = () => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
-// Format date to YYYY-MM-DD
+// Format date (YYYY-MM-DD)
 export const formatDate = (date) => {
   if (!date) return '';
   
@@ -18,7 +21,7 @@ export const formatDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// Format time to HH:MM AM/PM
+// Format time (HH:MM AM/PM)
 export const formatTime = (date) => {
   if (!date) return '';
   
@@ -65,15 +68,38 @@ export const formatDisplayDate = (date) => {
   return d.toLocaleDateString('en-US', options);
 };
 
+// Get color based on task type
+export const getTaskTypeColor = (type, courses = [], courseName) => {
+  // First try to get the color from the associated course
+  const course = courses.find(c => c.name === courseName);
+  if (course) {
+    return course.color;
+  }
+  
+  // Fallback colors based on task type
+  const typeColors = {
+    homework: '#4A6FFF', // Blue
+    quiz: '#FFC107', // Amber
+    exam: '#F44336', // Red
+    essay: '#9C27B0', // Purple
+    project: '#2196F3', // Sky Blue
+    reading: '#4CAF50', // Green
+    presentation: '#FF9800', // Orange
+    lab: '#607D8B', // Blue Grey
+    default: '#757575', // Grey
+  };
+  
+  return typeColors[type] || typeColors.default;
+};
+
 // Save tasks to AsyncStorage
 export const saveTasksToStorage = async (tasks) => {
   try {
     const serializedTasks = JSON.stringify(tasks);
-    await AsyncStorage.setItem('homework_tasks', serializedTasks);
+    await AsyncStorage.setItem(TASKS_STORAGE_KEY, serializedTasks);
     return true;
   } catch (error) {
-    Alert.alert('Error', 'Failed to save tasks');
-    console.error('Error saving tasks: ', error);
+    console.error('Error saving tasks:', error);
     return false;
   }
 };
@@ -81,7 +107,7 @@ export const saveTasksToStorage = async (tasks) => {
 // Load tasks from AsyncStorage
 export const loadTasksFromStorage = async () => {
   try {
-    const serializedTasks = await AsyncStorage.getItem('homework_tasks');
+    const serializedTasks = await AsyncStorage.getItem(TASKS_STORAGE_KEY);
     
     if (!serializedTasks) {
       return [];
@@ -89,34 +115,41 @@ export const loadTasksFromStorage = async () => {
     
     return JSON.parse(serializedTasks);
   } catch (error) {
-    Alert.alert('Error', 'Failed to load tasks');
-    console.error('Error loading tasks: ', error);
+    console.error('Error loading tasks:', error);
     return [];
   }
 };
 
-// Save calendar events to AsyncStorage
-export const saveEventsToStorage = async (events) => {
-  try {
-    await AsyncStorage.setItem('calendar_events', JSON.stringify(events));
-    return true;
-  } catch (error) {
-    Alert.alert('Error', 'Failed to save events');
-    console.error('Error saving events: ', error);
-    return false;
-  }
+// Get upcoming assignments (due in the next 7 days) for calendar highlight
+export const getTasksAsMarkedDates = (tasks, courses) => {
+  const markedDates = {};
+  
+  tasks.forEach(task => {
+    if (!task.completed) {
+      const dateString = task.dueDate;
+      
+      if (!markedDates[dateString]) {
+        markedDates[dateString] = { dots: [] };
+      }
+      
+      const color = getTaskTypeColor(task.type, courses, task.courseName);
+      
+      // Check if we already have a dot with this color
+      if (!markedDates[dateString].dots.some(dot => dot.color === color)) {
+        markedDates[dateString].dots.push({
+          key: task.id,
+          color: color,
+        });
+      }
+    }
+  });
+  
+  return markedDates;
 };
 
-// Load calendar events from AsyncStorage
-export const loadEventsFromStorage = async () => {
-  try {
-    const events = await AsyncStorage.getItem('calendar_events');
-    return events ? JSON.parse(events) : {};
-  } catch (error) {
-    Alert.alert('Error', 'Failed to load events');
-    console.error('Error loading events: ', error);
-    return {};
-  }
+// Get tasks for a specific date
+export const getTasksForDate = (tasks, dateString) => {
+  return tasks.filter(task => task.dueDate === dateString);
 };
 
 // Sort tasks by due date and priority
@@ -129,12 +162,16 @@ export const sortTasks = (tasks) => {
 
   return [...tasks].sort((a, b) => {
     // First sort by due date
-    const dateA = new Date(`${a.dueDate}T${a.dueTime}`);
-    const dateB = new Date(`${b.dueDate}T${b.dueTime}`);
+    const dateA = new Date(a.dueDate);
+    const dateB = new Date(b.dueDate);
     if (dateA < dateB) return -1;
     if (dateA > dateB) return 1;
     
-    // If dates are the same, sort by priority
+    // Then sort by completion status
+    if (a.completed && !b.completed) return 1;
+    if (!a.completed && b.completed) return -1;
+    
+    // If dates and completion status are the same, sort by priority
     return priorityWeight[b.priority] - priorityWeight[a.priority];
   });
 };
@@ -145,10 +182,11 @@ export default {
   parseDate,
   parseTime,
   formatDisplayDate,
+  getTaskTypeColor,
   saveTasksToStorage,
   loadTasksFromStorage,
+  getTasksAsMarkedDates,
+  getTasksForDate,
   generateUniqueId,
-  saveEventsToStorage,
-  loadEventsFromStorage,
   sortTasks,
 }; 
