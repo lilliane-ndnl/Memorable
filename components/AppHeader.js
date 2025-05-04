@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { COLORS, SHADOWS } from '../constants/theme';
 
 const AppHeader = () => {
   // Try to load the image logo, with text as fallback
@@ -27,10 +28,11 @@ const AppHeader = () => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.white,
     width: '100%',
     paddingHorizontal: 16,
     zIndex: 100,
+    ...SHADOWS.light,
   },
   headerContainer: {
     flexDirection: 'row',
