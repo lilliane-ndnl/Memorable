@@ -8,6 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "web:dev": "expo start --web --tunnel",
+    "web:check": "node ./scripts/check-web-config.js && npm run web",
     "lint": "expo lint",
     "test": "jest"
   },

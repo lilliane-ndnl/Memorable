@@ -1,17 +1,18 @@
 export const COLORS = {
-  primary: '#8E7CEF', // Main light purple color
-  secondary: '#FD9CA9', // Soft pink for accents
-  tertiary: '#67E7CA', // Mint green for additional highlights
-  background: '#FCFCFF', // Very light background
+  primary: '#4A6FFF', // Softer blue as primary color
+  secondary: '#E3E9FF', // Very light blue for secondary elements
+  tertiary: '#F5F7FF', // Even lighter blue for tertiary elements
+  background: '#FFFFFF', // Pure white background for minimalist look
   white: '#FFFFFF',
-  black: '#333333', // Soft black
-  gray: '#ADADAD',
-  lightGray: '#E6E6E6',
-  danger: '#FF6B6B', // For high priority tasks
-  warning: '#FFCC4D', // For medium priority
-  success: '#63D471', // For low priority
-  text: '#383838',
-  border: '#EFEFEF',
+  black: '#1E1E1E', // Darker black for better contrast
+  gray: '#8A8A8A', // Medium gray
+  lightGray: '#F2F2F2', // Very light gray for subtle dividers
+  danger: '#FF5A5A', // Softer red
+  warning: '#FFCC4D', // Amber for warnings
+  success: '#5AC464', // Soft green for success
+  text: '#3A3A3A', // Slightly softer than black for main text
+  textSecondary: '#757575', // Secondary text color
+  border: '#EFEFEF', // Light border color
 };
 
 export const SIZES = {

@@ -10,7 +10,7 @@ import {
   TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES } from '../constants/theme';
+import { COLORS, SIZES, SHADOWS } from '../constants/theme';
 import TaskItem from '../components/TaskItem';
 import AddTaskForm from '../components/AddTaskForm';
 import HomeworkTask from '../models/HomeworkTask';
@@ -207,44 +207,44 @@ const TasksScreen = ({ navigation }) => {
       {/* Filter tabs */}
       <View style={styles.filterContainer}>
         <TouchableOpacity 
-          style={[styles.filterTab, filter === 'all' && styles.activeFilterTab]}
+          style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
           onPress={() => setFilter('all')}
         >
           <Text 
-            style={[styles.filterText, filter === 'all' && styles.activeFilterText]}
+            style={[styles.filterText, filter === 'all' && styles.filterTextActive]}
           >
             All
           </Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.filterTab, filter === 'today' && styles.activeFilterTab]}
+          style={[styles.filterButton, filter === 'today' && styles.filterButtonActive]}
           onPress={() => setFilter('today')}
         >
           <Text 
-            style={[styles.filterText, filter === 'today' && styles.activeFilterText]}
+            style={[styles.filterText, filter === 'today' && styles.filterTextActive]}
           >
             Today
           </Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.filterTab, filter === 'upcoming' && styles.activeFilterTab]}
+          style={[styles.filterButton, filter === 'upcoming' && styles.filterButtonActive]}
           onPress={() => setFilter('upcoming')}
         >
           <Text 
-            style={[styles.filterText, filter === 'upcoming' && styles.activeFilterText]}
+            style={[styles.filterText, filter === 'upcoming' && styles.filterTextActive]}
           >
             Upcoming
           </Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.filterTab, filter === 'completed' && styles.activeFilterTab]}
+          style={[styles.filterButton, filter === 'completed' && styles.filterButtonActive]}
           onPress={() => setFilter('completed')}
         >
           <Text 
-            style={[styles.filterText, filter === 'completed' && styles.activeFilterText]}
+            style={[styles.filterText, filter === 'completed' && styles.filterTextActive]}
           >
             Completed
           </Text>
@@ -253,10 +253,10 @@ const TasksScreen = ({ navigation }) => {
       
       {/* Task list */}
       {filteredTasks.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <View style={styles.noTasksContainer}>
           <Ionicons name="document-text-outline" size={64} color={COLORS.lightGray} />
-          <Text style={styles.emptyText}>No tasks found</Text>
-          <Text style={styles.emptySubText}>
+          <Text style={styles.noTasksText}>No tasks found</Text>
+          <Text style={styles.noTasksSubText}>
             {filter === 'all' 
               ? "Tap the + button to add your first task" 
               : `No tasks in the '${filter}' category`}
@@ -313,91 +313,150 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SIZES.medium,
-    paddingVertical: SIZES.medium,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
   },
   headerTitle: {
-    fontSize: SIZES.extraLarge,
-    fontWeight: 'bold',
-    color: COLORS.primary,
+    fontSize: 24,
+    fontWeight: '600',
+    color: COLORS.black,
   },
   headerButton: {
-    padding: SIZES.base,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: COLORS.secondary,
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    margin: SIZES.medium,
-    borderRadius: SIZES.base,
-    paddingHorizontal: SIZES.medium,
-    paddingVertical: SIZES.small,
-  },
-  searchIcon: {
-    marginRight: SIZES.base,
-  },
-  searchInput: {
+  contentContainer: {
     flex: 1,
-    fontSize: SIZES.font,
-    color: COLORS.text,
   },
   filterContainer: {
     flexDirection: 'row',
-    marginHorizontal: SIZES.medium,
-    marginBottom: SIZES.medium,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  filterTab: {
-    flex: 1,
-    paddingVertical: SIZES.small,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+  filterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  activeFilterTab: {
-    borderBottomColor: COLORS.primary,
+  filterButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterText: {
-    fontSize: SIZES.font,
-    color: COLORS.gray,
+    fontSize: 14,
+    color: COLORS.textSecondary,
   },
-  activeFilterText: {
-    color: COLORS.primary,
-    fontWeight: '600',
+  filterTextActive: {
+    color: COLORS.white,
+  },
+  searchContainer: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  searchIcon: {
+    marginRight: 16,
+  },
+  searchInput: {
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
   },
   taskList: {
-    paddingHorizontal: SIZES.medium,
-    paddingBottom: SIZES.extraLarge,
+    flex: 1,
+    padding: 16,
   },
-  emptyContainer: {
+  taskItem: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    ...SHADOWS.light,
+  },
+  taskHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  priorityDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  taskTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  courseLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+  },
+  dueDate: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+  },
+  completedText: {
+    textDecorationLine: 'line-through',
+    color: COLORS.gray,
+  },
+  noTasksContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: SIZES.medium,
+    padding: 20,
   },
-  emptyText: {
-    fontSize: SIZES.medium,
-    color: COLORS.text,
-    marginTop: SIZES.small,
+  noTasksText: {
+    fontSize: 18,
     fontWeight: '500',
-  },
-  emptySubText: {
-    fontSize: SIZES.small,
     color: COLORS.gray,
-    marginTop: SIZES.base,
+    marginTop: 16,
+  },
+  noTasksSubText: {
+    fontSize: 14,
+    color: COLORS.gray,
+    marginTop: 8,
     textAlign: 'center',
+  },
+  addButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.medium,
   },
   modalContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
   },
   modalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: SIZES.medium,
-    paddingBottom: SIZES.large,
-    maxHeight: '80%',
+    width: '100%',
+    maxWidth: 500,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 20,
+    ...SHADOWS.medium,
   },
 });
 
