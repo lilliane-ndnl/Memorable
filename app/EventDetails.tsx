@@ -1,15 +1,14 @@
-import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { View } from 'react-native';
+import { Stack } from 'expo-router';
 import EventDetailsScreen from '../screens/EventDetailsScreen';
+import AppHeader from '@/components/AppHeader';
 
-export default function EventDetailsRoute() {
-  const params = useLocalSearchParams();
-  return <EventDetailsScreen event={params.event} />;
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-}); 
+export default function EventDetails() {
+  return (
+    <View style={{ flex: 1 }}>
+      <AppHeader />
+      <EventDetailsScreen />
+    </View>
+  );
+} 
