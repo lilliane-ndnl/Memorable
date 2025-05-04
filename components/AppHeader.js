@@ -4,23 +4,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SHADOWS } from '../constants/theme';
 
 const AppHeader = () => {
-  // Try to load the image logo, with text as fallback
-  const [logoError, setLogoError] = React.useState(false);
-  
+  // For now, we'll use the text version until a proper logo image is created
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        {!logoError ? (
+        {/* 
+          Uncomment this when you have the actual logo.png file
           <Image
             source={require('../assets/images/logo.png')}
             style={styles.logo}
-            onError={() => setLogoError(true)}
             resizeMode="contain"
           />
-        ) : (
-          // Fallback to text if image fails to load
-          <Text style={styles.logoText}>Memorable</Text>
-        )}
+        */}
+        <Text style={styles.logoText}>Memorable</Text>
       </View>
     </SafeAreaView>
   );
