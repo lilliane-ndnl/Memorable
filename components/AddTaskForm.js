@@ -22,6 +22,17 @@ const PRIORITY_OPTIONS = [
   { label: 'Low', value: 'low', color: COLORS.success },
 ];
 
+const ASSIGNMENT_TYPES = [
+  { label: 'Homework', value: 'homework', icon: 'create-outline' },
+  { label: 'Quiz', value: 'quiz', icon: 'help-circle-outline' },
+  { label: 'Exam', value: 'exam', icon: 'school-outline' },
+  { label: 'Essay', value: 'essay', icon: 'document-text-outline' },
+  { label: 'Project', value: 'project', icon: 'construct-outline' },
+  { label: 'Reading', value: 'reading', icon: 'book-outline' },
+  { label: 'Presentation', value: 'presentation', icon: 'easel-outline' },
+  { label: 'Lab', value: 'lab', icon: 'flask-outline' },
+];
+
 const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
   // State for form fields
   const [title, setTitle] = useState(initialTask?.title || '');
@@ -52,6 +63,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
   
   const [priority, setPriority] = useState(initialTask?.priority || 'medium');
   const [notes, setNotes] = useState(initialTask?.notes || '');
+  const [assignmentType, setAssignmentType] = useState(initialTask?.type || 'homework');
   
   // Date & Time picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -101,6 +113,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
       dueTime: formatTime(dueTime),
       priority,
       notes: notes.trim(),
+      type: assignmentType,
     };
 
     onSubmit(taskData);
@@ -129,18 +142,52 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>
-          {initialTask ? 'Edit Task' : 'Add New Task'}
+          {initialTask ? 'Edit Assignment' : 'Add New Assignment'}
         </Text>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Task Title</Text>
+          <Text style={styles.label}>Assignment Title</Text>
           <TextInput 
             style={styles.input}
             value={title}
             onChangeText={setTitle}
-            placeholder="Enter task title"
+            placeholder="Enter assignment title"
             placeholderTextColor={COLORS.gray}
           />
+        </View>
+        
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Assignment Type</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.typeScrollView}
+          >
+            {ASSIGNMENT_TYPES.map((type) => (
+              <TouchableOpacity
+                key={type.value}
+                style={[
+                  styles.typeButton,
+                  assignmentType === type.value && styles.activeTypeButton
+                ]}
+                onPress={() => setAssignmentType(type.value)}
+              >
+                <Ionicons 
+                  name={type.icon} 
+                  size={20} 
+                  color={assignmentType === type.value ? COLORS.white : COLORS.primary} 
+                />
+                <Text 
+                  style={[
+                    styles.typeText,
+                    assignmentType === type.value && styles.activeTypeText
+                  ]}
+                >
+                  {type.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         <View style={styles.formGroup}>
@@ -245,7 +292,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
             style={[styles.input, styles.textArea]}
             value={notes}
             onChangeText={setNotes}
-            placeholder="Add any notes or details"
+            placeholder="Add assignment details, instructions, or page numbers..."
             placeholderTextColor={COLORS.gray}
             multiline
             numberOfLines={4}
@@ -265,7 +312,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
             onPress={handleSubmit}
           >
             <Text style={styles.submitButtonText}>
-              {initialTask ? 'Update' : 'Add'} Task
+              {initialTask ? 'Update' : 'Add'} Assignment
             </Text>
           </TouchableOpacity>
         </View>
@@ -317,9 +364,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 8,
   },
-  optionsContainer: {
+  typeScrollView: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  typeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  activeTypeButton: {
+    backgroundColor: COLORS.primary,
+  },
+  typeText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    marginLeft: 6,
+  },
+  activeTypeText: {
+    color: COLORS.white,
   },
   optionButton: {
     flexDirection: 'row',
