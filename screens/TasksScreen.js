@@ -259,11 +259,7 @@ const TasksScreen = () => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Image 
-        source={require('../assets/images/empty-tasks.png')} 
-        style={styles.emptyImage}
-        resizeMode="contain"
-      />
+      <Ionicons name="document-text-outline" size={80} color={COLORS.primary} style={styles.emptyIcon} />
       <Text style={styles.emptyTitle}>No Tasks Yet</Text>
       <Text style={styles.emptyText}>
         Add your homework and assignments to keep track of everything
@@ -556,11 +552,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 30,
   },
-  emptyImage: {
-    width: 150,
-    height: 150,
+  emptyIcon: {
     marginBottom: 20,
-    opacity: 0.8,
   },
   emptyTitle: {
     fontSize: 20,
