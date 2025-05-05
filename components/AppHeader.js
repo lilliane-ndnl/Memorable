@@ -4,19 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SHADOWS } from '../constants/theme';
 
 const AppHeader = () => {
-  // For now, we'll use the text version until a proper logo image is created
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        {/* 
-          Uncomment this when you have the actual logo.png file
-          <Image
-            source={require('../assets/images/logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        */}
-        <Text style={styles.logoText}>Memorable</Text>
+        <Image
+          source={require('../assets/images/logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        {/* <Text style={styles.logoText}>Memorable</Text> */}
       </View>
     </SafeAreaView>
   );
@@ -36,8 +32,9 @@ const styles = StyleSheet.create({
     height: 50,
   },
   logo: {
-    height: 32,
-    width: 160,
+    height: 40,
+    width: 200,
+    marginVertical: 5,
   },
   logoText: {
     fontSize: 24,
