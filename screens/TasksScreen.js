@@ -18,6 +18,7 @@ import AddTaskForm from '../components/AddTaskForm';
 import { loadTasksFromStorage, saveTasksToStorage, formatDisplayDate } from '../utils/helpers';
 import { loadCoursesFromStorage } from '../utils/courseHelpers';
 import { loadTaskGroupsFromStorage, saveTaskGroupsToStorage } from '../utils/groupHelpers';
+import TaskItem from '../components/TaskItem';
 
 // Icons for assignment types
 const ASSIGNMENT_ICONS = {
@@ -134,6 +135,7 @@ const TasksScreen = () => {
       ...taskData,
       completed: editingTask?.completed || false,
       type: taskData.type || 'homework',
+      subTasks: taskData.subTasks || [],
     };
     
     if (editingTask) {
@@ -207,6 +209,34 @@ const TasksScreen = () => {
     const updatedTasks = tasks.map(task => {
       if (task.id === id) {
         return { ...task, completed: !task.completed };
+      }
+      return task;
+    });
+    
+    setTasks(updatedTasks);
+    saveTasksToStorage(updatedTasks);
+  };
+
+  const handleToggleSubTaskComplete = (taskId, subTaskId) => {
+    const updatedTasks = tasks.map(task => {
+      if (task.id === taskId && task.subTasks) {
+        // Toggle the subtask completion
+        const updatedSubTasks = task.subTasks.map(subTask => {
+          if (subTask.id === subTaskId) {
+            return { ...subTask, completed: !subTask.completed };
+          }
+          return subTask;
+        });
+        
+        // Calculate if all subtasks are completed
+        const allSubTasksCompleted = updatedSubTasks.every(st => st.completed);
+        
+        // Update the main task completion based on subtasks
+        return { 
+          ...task, 
+          subTasks: updatedSubTasks,
+          completed: allSubTasksCompleted
+        };
       }
       return task;
     });
@@ -356,48 +386,64 @@ const TasksScreen = () => {
   };
 
   const renderTaskItem = ({ item }) => {
-    const taskCategory = getTaskCategory(item.tasks[0]);
-    const categoryStyle = getCategoryStyle(taskCategory);
+    const taskItem = item.tasks[0]; // Get the task from the group
+    const courseColor = getCourseColor(taskItem.courseName);
     
+    // If the task has subtasks, use our upgraded TaskItem component
+    if (taskItem.subTasks && taskItem.subTasks.length > 0) {
+      return (
+        <TaskItem
+          task={taskItem}
+          onPress={() => handleEditTask(taskItem)}
+          onToggleComplete={handleToggleComplete}
+          onToggleSubTaskComplete={handleToggleSubTaskComplete}
+          onDelete={handleDeleteTask}
+          courseColor={courseColor}
+          groups={groups}
+        />
+      );
+    }
+    
+    // Otherwise use the existing task item rendering
     return (
       <TouchableOpacity
         style={[
           styles.taskItem,
-          categoryStyle,
-          { borderLeftColor: getCourseColor(item.tasks[0].courseName) },
-          item.tasks[0].completed && styles.completedTask
+          getCategoryStyle(getTaskCategory(taskItem)),
+          { borderLeftColor: courseColor },
+          taskItem.completed && styles.completedTask
         ]}
-        onPress={() => handleEditTask(item.tasks[0])}
+        onPress={() => handleEditTask(taskItem)}
       >
         <TouchableOpacity
           style={[
             styles.completeButton,
-            item.tasks[0].completed && styles.completedButton
+            taskItem.completed && styles.completedButton
           ]}
-          onPress={() => handleToggleComplete(item.tasks[0].id)}
+          onPress={() => handleToggleComplete(taskItem.id)}
         >
-          {item.tasks[0].completed && (
+          {taskItem.completed && (
             <Ionicons name="checkmark" size={18} color={COLORS.white} />
           )}
         </TouchableOpacity>
         
         <View style={styles.taskContent}>
           <View style={styles.taskHeader}>
-            <Text style={[styles.taskTitle, item.tasks[0].completed && styles.completedText]}>
-              {item.tasks[0].title}
+            <Text style={[styles.taskTitle, taskItem.completed && styles.completedText]}>
+              {taskItem.title}
             </Text>
-            <Ionicons name={getTaskIcon(item.tasks[0])} size={20} color={getCourseColor(item.tasks[0].courseName)} />
+            <Ionicons name={getTaskIcon(taskItem)} size={20} color={courseColor} />
           </View>
           
           <View style={styles.taskDetails}>
-            <Text style={styles.courseText}>{item.tasks[0].courseName}</Text>
-            <Text style={styles.timeText}>{item.tasks[0].dueTime}</Text>
+            <Text style={styles.courseText}>{taskItem.courseName}</Text>
+            <Text style={styles.timeText}>{taskItem.dueTime}</Text>
           </View>
           
           {/* Show group tag if task is in a group */}
-          {item.tasks[0].groupId && (
+          {taskItem.groupId && (
             <View style={styles.taskGroupInfo}>
-              {groups.filter(g => g.id === item.tasks[0].groupId).map(group => (
+              {groups.filter(g => g.id === taskItem.groupId).map(group => (
                 <View 
                   key={group.id} 
                   style={[styles.groupTag, { backgroundColor: group.color + '30' }]}
@@ -410,14 +456,14 @@ const TasksScreen = () => {
             </View>
           )}
           
-          {item.tasks[0].notes && (
-            <Text style={styles.notes} numberOfLines={2}>{item.tasks[0].notes}</Text>
+          {taskItem.notes && (
+            <Text style={styles.notes} numberOfLines={2}>{taskItem.notes}</Text>
           )}
         </View>
         
         <TouchableOpacity
           style={styles.deleteButton}
-          onPress={() => handleDeleteTask(item.tasks[0].id)}
+          onPress={() => handleDeleteTask(taskItem.id)}
         >
           <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
         </TouchableOpacity>
