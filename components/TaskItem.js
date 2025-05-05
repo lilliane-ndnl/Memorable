@@ -36,6 +36,7 @@ const TaskItem = ({
   task, 
   onPress, 
   onToggleComplete, 
+  onToggleSubTaskComplete,
   onDelete, 
   courseColor,
   groups = []
@@ -84,6 +85,13 @@ const TaskItem = ({
     
     const completedCount = task.subTasks.filter(subTask => subTask.completed).length;
     return Math.round((completedCount / task.subTasks.length) * 100);
+  };
+  
+  // Handle subtask toggle
+  const handleSubTaskToggle = (subTaskId) => {
+    if (onToggleSubTaskComplete) {
+      onToggleSubTaskComplete(task.id, subTaskId);
+    }
   };
   
   const completionPercentage = getCompletionPercentage();
@@ -190,21 +198,24 @@ const TaskItem = ({
         <View style={styles.subtaskList}>
           {task.subTasks.map(subtask => (
             <View key={subtask.id} style={styles.subtaskItem}>
-              <View style={styles.subtaskContent}>
+              <TouchableOpacity
+                style={styles.subtaskToggle}
+                onPress={() => handleSubTaskToggle(subtask.id)}
+              >
                 <Ionicons 
                   name={subtask.completed ? 'checkmark-circle' : 'ellipse-outline'} 
                   size={16} 
                   color={subtask.completed ? COLORS.success : COLORS.gray} 
                 />
-                <Text 
-                  style={[
-                    styles.subtaskTitle,
-                    subtask.completed && styles.completedText
-                  ]}
-                >
-                  {subtask.title}
-                </Text>
-              </View>
+              </TouchableOpacity>
+              <Text 
+                style={[
+                  styles.subtaskTitle,
+                  subtask.completed && styles.completedText
+                ]}
+              >
+                {subtask.title}
+              </Text>
             </View>
           ))}
         </View>
@@ -373,15 +384,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray + '70',
   },
-  subtaskContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+  subtaskToggle: {
+    padding: 4,
+    marginRight: 4,
   },
   subtaskTitle: {
     fontSize: 14,
     color: COLORS.text,
-    marginLeft: 8,
+    marginLeft: 4,
+    flex: 1,
   },
 });
 
