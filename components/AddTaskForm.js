@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SHADOWS } from '../constants/theme';
+import { COLORS, SHADOWS, SIZES } from '../constants/theme';
 import { COURSE_COLORS } from '../constants/theme';
 import { formatDate, formatTime } from '../utils/helpers';
 import { loadCoursesFromStorage } from '../utils/courseHelpers';
@@ -162,18 +162,16 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
 
   // Date picker handlers
   const onDateChange = (event, selectedDate) => {
+    const currentDate = selectedDate || dueDate;
     setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDueDate(selectedDate);
-    }
+    setDueDate(currentDate);
   };
 
   // Time picker handlers
   const onTimeChange = (event, selectedTime) => {
+    const currentTime = selectedTime || dueTime;
     setShowTimePicker(Platform.OS === 'ios');
-    if (selectedTime) {
-      setDueTime(selectedTime);
-    }
+    setDueTime(currentTime);
   };
   
   // Add new group
@@ -392,10 +390,12 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
             </TouchableOpacity>
             {showDatePicker && (
               <DateTimePicker
+                testID="dateTimePicker"
                 value={dueDate}
                 mode="date"
-                display="default"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={onDateChange}
+                minimumDate={new Date()}
               />
             )}
           </View>
@@ -413,10 +413,11 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
             </TouchableOpacity>
             {showTimePicker && (
               <DateTimePicker
+                testID="timeTimePicker"
                 value={dueTime}
                 mode="time"
                 is24Hour={false}
-                display="default"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={onTimeChange}
               />
             )}
@@ -601,7 +602,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: SIZES.buttonRadius - 4,
     marginRight: 8,
     borderWidth: 1,
     borderColor: COLORS.gray,
@@ -629,7 +630,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: SIZES.buttonRadius - 4,
     marginRight: 8,
     marginBottom: 8,
     borderWidth: 1,
@@ -649,7 +650,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.lightGray,
-    borderRadius: 8,
+    borderRadius: SIZES.buttonRadius - 4,
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
@@ -690,7 +691,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: SIZES.buttonRadius,
     ...SHADOWS.light,
   },
   cancelButton: {

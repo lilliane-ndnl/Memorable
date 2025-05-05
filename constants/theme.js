@@ -1,7 +1,7 @@
 export const COLORS = {
-  primary: '#4A6FFF', // Softer blue as primary color
-  secondary: '#E3E9FF', // Very light blue for secondary elements
-  tertiary: '#F5F7FF', // Even lighter blue for tertiary elements
+  primary: '#8E44AD', // Changed from blue to a purple shade
+  secondary: '#E8DAEF', // Light purple for secondary elements
+  tertiary: '#F5F0F7', // Even lighter purple for tertiary elements
   background: '#FFFFFF', // Pure white background for minimalist look
   white: '#FFFFFF',
   black: '#1E1E1E', // Darker black for better contrast
@@ -13,6 +13,8 @@ export const COLORS = {
   text: '#3A3A3A', // Slightly softer than black for main text
   textSecondary: '#757575', // Secondary text color
   border: '#EFEFEF', // Light border color
+  // Gradient colors
+  gradientPrimary: ['#9B59B6', '#8E44AD', '#6C3483'], // Purple gradient
 };
 
 export const SIZES = {
@@ -26,6 +28,8 @@ export const SIZES = {
   // Desktop specific sizes
   maxContentWidth: 1200,
   sidebarWidth: 280,
+  // Updated button radius
+  buttonRadius: 16, // More rounded buttons (was implicitly 8)
 };
 
 export const FONTS = {
