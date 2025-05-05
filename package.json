@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "web:dev": "expo start --web --tunnel",
     "web:check": "node ./scripts/check-web-config.js && npm run web",
+    "build:web": "expo export:web",
     "lint": "expo lint",
     "test": "jest"
   },
