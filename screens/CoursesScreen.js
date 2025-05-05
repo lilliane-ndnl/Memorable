@@ -1,33 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  TouchableOpacity, 
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Dimensions,
   FlatList,
   Modal,
+  Platform,
+  Pressable,
   SafeAreaView,
-  Alert,
+  StyleSheet,
+  Text,
   TextInput,
-  Dimensions,
-  Platform
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SHADOWS, SIZES, COURSE_COLORS } from '../constants/theme';
 import CourseForm from '../components/CourseForm';
+import { COLORS, COURSE_COLORS, SHADOWS, SIZES } from '../constants/theme';
 import Course from '../models/Course';
-import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  loadCoursesFromStorage, 
-  saveCoursesToStorage, 
-  generateCourseId 
+import {
+  generateCourseId,
+  loadCoursesFromStorage,
+  saveCoursesToStorage
 } from '../utils/courseHelpers';
 
 const { width } = Dimensions.get('window');
-// Adjust folder width based on screen size
-const FOLDER_WIDTH = Platform.OS === 'web' 
-  ? Math.min(220, (width / 4) - 24) 
-  : (width / 2) - 24;
+
+// Calculate responsive grid dimensions
+const getGridDimensions = () => {
+  if (Platform.OS === 'web') {
+    if (width > 1200) return { columns: 5, width: 220 };
+    if (width > 900) return { columns: 4, width: 220 };
+    if (width > 600) return { columns: 3, width: 200 };
+    return { columns: 2, width: Math.min(220, (width / 2) - 32) };
+  } 
+  return { columns: 2, width: (width / 2) - 32 };
+};
+
+const { columns, width: FOLDER_WIDTH } = getGridDimensions();
 
 const PREDEFINED_COLORS = Object.values(COURSE_COLORS);
 
@@ -37,6 +48,7 @@ const CoursesScreen = ({ navigation }) => {
   const [editingCourse, setEditingCourse] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredCourses, setFilteredCourses] = useState([]);
+  const [animatedValue] = useState(new Animated.Value(0));
 
   // Load courses on component mount
   useEffect(() => {
@@ -132,52 +144,83 @@ const CoursesScreen = ({ navigation }) => {
     
     // Create gradient colors based on folder color
     const gradientColors = [
-      lightenColor(folderColor, 20),
+      lightenColor(folderColor, 15),
       folderColor,
-      darkenColor(folderColor, 20)
+      darkenColor(folderColor, 15)
     ];
     
-    // Get course schedule info for display
-    const scheduleInfo = item.schedule && item.schedule.length > 0 
-      ? `${item.schedule.length} ${item.schedule.length === 1 ? 'session' : 'sessions'}`
-      : 'No schedule';
+    // Get course abbreviation
+    const getAbbreviation = (name) => {
+      const words = name.split(' ');
+      if (words.length === 1) {
+        return words[0].substring(0, 2).toUpperCase();
+      } 
+      return words.slice(0, 2).map(word => word.charAt(0)).join('').toUpperCase();
+    };
+
+    // Get session days as abbreviations
+    const getSessionDays = () => {
+      if (!item.schedule || item.schedule.length === 0) return 'No schedule';
+      
+      const days = item.schedule.map(session => session.day.substring(0, 3));
+      const uniqueDays = [...new Set(days)];
+      return uniqueDays.join(', ');
+    };
     
     return (
-      <TouchableOpacity 
-        style={styles.folderContainer}
+      <Pressable 
+        style={({ pressed }) => [
+          styles.folderContainer,
+          pressed && { transform: [{ scale: 0.98 }], opacity: 0.9 }
+        ]}
         onPress={() => handleEditCourse(item)}
-        activeOpacity={0.9}
       >
-        {/* Folder top flap */}
+        {/* Folder back */}
         <LinearGradient 
-          colors={[gradientColors[0], gradientColors[1]]}
-          style={styles.folderTop}
-        >
-          <View style={styles.folderTab} />
-        </LinearGradient>
+          colors={[darkenColor(folderColor, 25), darkenColor(folderColor, 15)]}
+          style={styles.folderBack}
+        />
         
-        {/* Folder body */}
+        {/* Folder main */}
         <LinearGradient 
           colors={gradientColors}
-          style={styles.folderBody}
+          style={styles.folderMain}
         >
-          <View style={styles.labelContainer}>
-            <Text style={styles.courseLabel}>{item.name.toUpperCase()}</Text>
+          <View style={styles.tabContainer}>
+            <View style={[styles.folderTab, { backgroundColor: lightenColor(folderColor, 30) }]} />
           </View>
           
-          <View style={styles.courseInfoRow}>
-            <Text style={styles.scheduleText}>{scheduleInfo}</Text>
+          {/* Course abbreviation circle */}
+          <View style={styles.abbreviationContainer}>
+            <Text style={styles.abbreviationText}>{getAbbreviation(item.name)}</Text>
+          </View>
+          
+          {/* Course details */}
+          <View style={styles.courseDetails}>
+            <Text style={styles.courseName} numberOfLines={2} ellipsizeMode="tail">
+              {item.name}
+            </Text>
+            <Text style={styles.courseDays}>{getSessionDays()}</Text>
             
-            <TouchableOpacity 
-              style={styles.deleteButton}
-              onPress={() => handleDeleteCourse(item.id)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="trash-outline" size={18} color={COLORS.white} />
-            </TouchableOpacity>
+            {/* Action buttons */}
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: lightenColor(folderColor, 30) }]}
+                onPress={() => handleEditCourse(item)}
+              >
+                <Ionicons name="pencil" size={16} color={darkenColor(folderColor, 30)} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: lightenColor(folderColor, 30) }]}
+                onPress={() => handleDeleteCourse(item.id)}
+              >
+                <Ionicons name="trash-outline" size={16} color={darkenColor(folderColor, 30)} />
+              </TouchableOpacity>
+            </View>
           </View>
         </LinearGradient>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
@@ -190,21 +233,18 @@ const CoursesScreen = ({ navigation }) => {
       }}
       activeOpacity={0.7}
     >
-      <LinearGradient
-        colors={['rgba(142, 68, 173, 0.05)', 'rgba(142, 68, 173, 0.1)']}
-        style={styles.addFolderContent}
-      >
+      <View style={styles.addFolderContent}>
         <View style={styles.addIconContainer}>
           <Ionicons name="add" size={36} color={COLORS.primary} />
         </View>
         <Text style={styles.addFolderText}>Add Course</Text>
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      <Text style={styles.headerTitle}>Courses</Text>
+      <Text style={styles.headerTitle}>My Courses</Text>
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={COLORS.gray} style={styles.searchIcon} />
         <TextInput
@@ -214,6 +254,11 @@ const CoursesScreen = ({ navigation }) => {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        {searchQuery.trim() !== '' && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={20} color={COLORS.gray} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -228,7 +273,7 @@ const CoursesScreen = ({ navigation }) => {
           <Ionicons name="school-outline" size={72} color={COLORS.lightGray} />
           <Text style={styles.emptyText}>No courses added yet</Text>
           <Text style={styles.emptySubText}>
-            Create course folders to keep track of course-related files
+            Create course folders to organize your academic schedule
           </Text>
           <TouchableOpacity
             style={styles.emptyButton}
@@ -237,9 +282,13 @@ const CoursesScreen = ({ navigation }) => {
               setModalVisible(true);
             }}
           >
-            <View style={[styles.emptyButtonContent, { backgroundColor: COLORS.primary }]}>
-              <Text style={styles.emptyButtonText}>Add Course</Text>
-            </View>
+            <LinearGradient 
+              colors={[COLORS.primary, darkenColor(COLORS.primary, 15)]} 
+              style={styles.emptyButtonContent}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={COLORS.white} style={{marginRight: 8}} />
+              <Text style={styles.emptyButtonText}>Create First Course</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       ) : (
@@ -248,11 +297,12 @@ const CoursesScreen = ({ navigation }) => {
             data={filteredCourses}
             keyExtractor={(item) => item.id}
             renderItem={renderCourseFolder}
-            numColumns={Platform.OS === 'web' ? 4 : 2}
+            numColumns={columns}
+            key={`courses-grid-${columns}`}
             contentContainerStyle={styles.folderGrid}
             ListFooterComponent={renderAddFolderButton}
             showsVerticalScrollIndicator={false}
-            key={Platform.OS === 'web' ? 'web-grid' : 'mobile-grid'}
+            initialNumToRender={12}
           />
         </View>
       )}
@@ -332,107 +382,137 @@ const styles = StyleSheet.create({
   folderGrid: {
     padding: 16,
     paddingBottom: 32,
-    alignItems: 'flex-start',
+    alignItems: Platform.OS === 'web' ? 'center' : 'flex-start',
   },
   folderContainer: {
     width: FOLDER_WIDTH,
-    height: 170,
-    margin: 10,
+    height: 200,
+    margin: 12,
     borderRadius: SIZES.buttonRadius,
-    overflow: 'hidden',
+    overflow: 'visible',
+  },
+  folderBack: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    width: FOLDER_WIDTH,
+    height: 190,
+    borderRadius: SIZES.buttonRadius,
+    zIndex: 1,
+  },
+  folderMain: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: FOLDER_WIDTH,
+    height: 190,
+    borderRadius: SIZES.buttonRadius,
+    padding: 0,
+    zIndex: 2,
     ...SHADOWS.medium,
   },
-  folderTop: {
-    height: 40,
+  tabContainer: {
+    height: 25,
     borderTopLeftRadius: SIZES.buttonRadius,
     borderTopRightRadius: SIZES.buttonRadius,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    zIndex: 1,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.3)',
   },
   folderTab: {
     position: 'absolute',
-    right: 20,
+    width: 60,
+    height: 25,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    left: (FOLDER_WIDTH - 60) / 2,
+    top: -15,
+  },
+  abbreviationContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: 'rgba(255,255,255,0.3)',
-    width: 40,
-    height: 12,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    top: 0,
-  },
-  folderBody: {
-    flex: 1,
-    borderBottomLeftRadius: SIZES.buttonRadius,
-    borderBottomRightRadius: SIZES.buttonRadius,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  labelContainer: {
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8,
+    alignSelf: 'center',
+    marginTop: 10,
     marginBottom: 10,
   },
-  courseLabel: {
-    fontSize: 18,
+  abbreviationText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  courseDetails: {
+    padding: 15,
+    alignItems: 'center',
+    flex: 1,
+  },
+  courseName: {
+    fontSize: 16,
     fontWeight: '700',
     color: COLORS.white,
     textAlign: 'center',
-    letterSpacing: 1,
+    marginBottom: 5,
+    height: 40,
   },
-  courseInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  scheduleText: {
-    fontSize: 14,
+  courseDays: {
+    fontSize: 12,
     color: COLORS.white,
     opacity: 0.9,
+    marginBottom: 10,
   },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  actionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 'auto',
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   // Add folder button
   addFolderButton: {
     width: FOLDER_WIDTH,
-    height: 170,
-    margin: 10,
+    height: 190,
+    margin: 12,
     borderRadius: SIZES.buttonRadius,
     overflow: 'hidden',
     borderStyle: 'dashed',
     borderWidth: 2,
     borderColor: COLORS.primary,
+    backgroundColor: 'rgba(142, 68, 173, 0.05)',
+    ...Platform.select({
+      web: {
+        transition: 'all 0.3s ease',
+        ':hover': {
+          transform: 'scale(1.03)',
+          backgroundColor: 'rgba(142, 68, 173, 0.1)',
+        }
+      }
+    })
   },
   addFolderContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 15,
-    backgroundColor: 'rgba(142, 68, 173, 0.05)',
   },
   addIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: 'rgba(142, 68, 173, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   addFolderText: {
     color: COLORS.primary,
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 18,
   },
   // Empty state
   emptyCourses: {
@@ -454,9 +534,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 30,
     maxWidth: 300,
+    lineHeight: 24,
   },
   emptyButton: {
-    width: 200,
+    width: 220,
     height: 50,
     borderRadius: SIZES.buttonRadius,
     overflow: 'hidden',
@@ -465,6 +546,7 @@ const styles = StyleSheet.create({
   emptyButtonContent: {
     width: '100%',
     height: '100%',
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
