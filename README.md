@@ -72,5 +72,7 @@ This application is optimized for desktop use. When running the app:
 ## License
 
 Copyright © 2024 Lilliane Nguyen.
+
 This project is proprietary software developed by Lilliane. All rights reserved.
+
 No part of this application's code may be recreated or reused without explicit written permission from Lilliane Nguyen.
