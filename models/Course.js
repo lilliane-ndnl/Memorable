@@ -1,9 +1,12 @@
-class Course {
-  constructor(id, name, color, schedule = []) {
+export default class Course {
+  constructor(id, name, color, schedule = [], startDate = null, endDate = null) {
     this.id = id;
     this.name = name;
     this.color = color; 
     this.schedule = schedule; // Array of schedule objects with day, startTime, endTime, location
+    this.startDate = startDate;
+    this.endDate = endDate;
+    this.createdAt = new Date().toISOString();
   }
 
   addClassTime(day, startTime, endTime, location = '') {
@@ -39,6 +42,4 @@ class Course {
       })
       .join('\n');
   }
-}
-
-export default Course; 
+} 

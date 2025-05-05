@@ -17,7 +17,6 @@ import { COLORS, SHADOWS, SIZES } from '../constants/theme';
 import { loadCoursesFromStorage, getCoursesAsMarkedDates } from '../utils/courseHelpers';
 import { loadTasksFromStorage, getTasksAsMarkedDates as getTaskMarks, getTasksForDate } from '../utils/helpers';
 import AddTaskForm from '../components/AddTaskForm';
-import { LinearGradient } from 'expo-linear-gradient';
 
 // View mode constants
 const VIEW_MODES = {
@@ -503,14 +502,9 @@ const CalendarScreen = () => {
               style={styles.addButton}
               onPress={() => setModalVisible(true)}
             >
-              <LinearGradient
-                colors={COLORS.gradientPrimary}
-                style={styles.gradientButton}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
+              <View style={[styles.regularButton, { backgroundColor: COLORS.primary }]}>
                 <Ionicons name="add" size={24} color={COLORS.white} />
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
           </View>
           {renderDailyEvents()}
@@ -600,7 +594,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...SHADOWS.light,
   },
-  gradientButton: {
+  regularButton: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
