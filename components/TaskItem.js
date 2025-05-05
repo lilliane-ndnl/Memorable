@@ -71,10 +71,10 @@ const TaskItem = ({
   const getDeadlineText = () => {
     if (!task.dueDate) return 'No deadline';
 
-    let text = formatDate(task.dueDate);
+    let text = task.getFormattedDueDate();
     
     if (task.dueTime) {
-      text += ` at ${formatTime(task.dueTime)}`;
+      text += ` at ${task.getFormattedDueTime()}`;
     }
     
     return text;

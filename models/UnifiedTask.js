@@ -130,18 +130,17 @@ export default class UnifiedTask {
   // Helper method to check if the task is due today
   isDueToday() {
     if (!this.dueDate) return false;
-    const today = new Date().toISOString().split('T')[0];
-    return today === this.dueDate;
+    const today = new Date();
+    const taskDate = new Date(this.dueDate);
+    return today.toDateString() === taskDate.toDateString();
   }
 
   // Helper method to check if the task is overdue
   isOverdue() {
     if (!this.dueDate) return false;
-    const today = new Date();
-    const dueDateTime = this.dueTime 
-      ? new Date(`${this.dueDate}T${this.dueTime}`) 
-      : new Date(`${this.dueDate}T23:59:59`);
-    return today > dueDateTime && !this.isCompleted;
+    const now = new Date();
+    const dueDateTime = this.getDueDateTime();
+    return dueDateTime < now && !this.isCompleted;
   }
 
   // Helper method to check if task is due soon (within next 48 hours)
@@ -152,31 +151,41 @@ export default class UnifiedTask {
     const soonCutoff = new Date(now);
     soonCutoff.setHours(now.getHours() + 48); // 48 hours from now
     
-    const dueDateTime = this.dueTime 
-      ? new Date(`${this.dueDate}T${this.dueTime}`) 
-      : new Date(`${this.dueDate}T23:59:59`);
-      
+    const dueDateTime = this.getDueDateTime();
     return dueDateTime > now && dueDateTime <= soonCutoff;
   }
 
-  // Helper method to get the priority color
-  getPriorityColor() {
-    switch (this.priority) {
-      case 'high':
-        return '#FF6B6B'; // Red
-      case 'medium':
-        return '#FFCC4D'; // Yellow
-      case 'low':
-        return '#63D471'; // Green
-      default:
-        return '#ADADAD'; // Gray
+  // Helper method to get the full due date and time
+  getDueDateTime() {
+    if (!this.dueDate) return null;
+    
+    const date = new Date(this.dueDate);
+    if (this.dueTime) {
+      const [hours, minutes] = this.dueTime.split(':').map(Number);
+      date.setHours(hours, minutes, 0, 0);
+    } else {
+      date.setHours(23, 59, 59, 999); // End of day if no time specified
     }
+    return date;
   }
 
   // Create a formatted date string for display
   getFormattedDueDate(options = { weekday: 'short', month: 'short', day: 'numeric' }) {
     if (!this.dueDate) return 'No due date';
     return new Date(this.dueDate).toLocaleDateString(undefined, options);
+  }
+
+  // Create a formatted time string for display
+  getFormattedDueTime() {
+    if (!this.dueTime) return '';
+    const [hours, minutes] = this.dueTime.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
   }
   
   // Helper method to check if all sub-tasks are completed
@@ -234,5 +243,19 @@ export default class UnifiedTask {
       category: this.category,
       isCompleted: this.isCompleted
     };
+  }
+
+  // Helper method to get the priority color
+  getPriorityColor() {
+    switch (this.priority) {
+      case 'high':
+        return '#FF6B6B'; // Red
+      case 'medium':
+        return '#FFCC4D'; // Yellow
+      case 'low':
+        return '#63D471'; // Green
+      default:
+        return '#ADADAD'; // Gray
+    }
   }
 } 

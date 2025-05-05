@@ -1,17 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FlatList,
-  Modal,
+    FlatList,
+    Image,
+    Modal,
     RefreshControl,
-  SafeAreaView,
-  ScrollView,
+    SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
+import GradientButton from '../components/GradientButton';
 import TaskForm from '../components/TaskForm';
 import TaskItem from '../components/TaskItem';
 import { COLORS, SHADOWS, SIZES } from '../constants/theme';
@@ -676,7 +678,13 @@ const TasksScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Tasks</Text>
+        <View style={styles.logoContainer}>
+          <Image 
+            source={require('../assets/images/App Logo - Transparent.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
         
         {/* Search bar */}
         <View style={styles.searchContainer}>
@@ -708,15 +716,16 @@ const TasksScreen = ({ navigation }) => {
       </View>
       
       {/* Add task button */}
-      <TouchableOpacity
-        style={styles.addButton}
+      <GradientButton
+        title="Add Task"
         onPress={() => {
           setEditingTask(null);
           setModalVisible(true);
         }}
-      >
-        <Ionicons name="add" size={24} color={COLORS.white} />
-      </TouchableOpacity>
+        style={styles.addButton}
+        icon={<Ionicons name="add" size={24} color={COLORS.white} />}
+        size="large"
+      />
       
       {/* Task form modal */}
       <Modal
@@ -753,12 +762,13 @@ const styles = StyleSheet.create({
     padding: 20,
     ...SHADOWS.light,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: COLORS.text,
+  logoContainer: {
+    alignItems: 'center',
     marginBottom: 20,
-    textAlign: 'center',
+  },
+  logo: {
+    width: 120,
+    height: 40,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -845,10 +855,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.dark,
   },
   modalContainer: {
     flex: 1,
@@ -976,6 +982,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     maxWidth: 300,
+  },
+  formActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    gap: 8,
+  },
+  cancelButton: {
+    flex: 1,
+  },
+  submitButton: {
+    flex: 2,
   },
 });
 

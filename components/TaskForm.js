@@ -16,6 +16,7 @@ import {
 import { COLORS, SHADOWS, SIZES } from '../constants/theme';
 import { loadCoursesFromStorage } from '../utils/courseHelpers';
 import { generateTaskId } from '../utils/taskHelpers';
+import GradientButton from './GradientButton';
 
 const CATEGORIES = [
   { id: 'homework', label: 'Homework', icon: 'document-text' },
@@ -85,30 +86,40 @@ const TaskForm = ({ initialTask = null, onSubmit, onCancel }) => {
     }
   }, [initialTask]);
   
+  // Handle date change
+  const handleDateChange = (event, selectedDate) => {
+    setShowDueDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      // Preserve the time if it exists
+      if (dueTime) {
+        const [hours, minutes] = dueTime.split(':');
+        selectedDate.setHours(parseInt(hours, 10), parseInt(minutes, 10));
+      }
+      setDueDate(selectedDate);
+    }
+  };
+  
+  // Handle time change
+  const handleTimeChange = (event, selectedTime) => {
+    setShowDueTimePicker(Platform.OS === 'ios');
+    if (selectedTime) {
+      // If we have a due date, update its time
+      if (dueDate) {
+        const newDate = new Date(dueDate);
+        newDate.setHours(selectedTime.getHours(), selectedTime.getMinutes());
+        setDueDate(newDate);
+      }
+      setDueTime(selectedTime);
+    }
+  };
+  
   // Helper to convert time string to Date object
   const convertTimeStringToDate = (timeString) => {
+    if (!timeString) return null;
     const [hours, minutes] = timeString.split(':').map(Number);
     const date = new Date();
     date.setHours(hours, minutes, 0, 0);
     return date;
-  };
-  
-  // Helper to convert Date to time string
-  const formatTimeString = (date) => {
-    if (!date) return null;
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-  
-  // Helper to format date for display
-  const formatDateForDisplay = (date) => {
-    if (!date) return 'No date selected';
-    return date.toLocaleDateString(undefined, { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
   };
   
   // Helper to format time for display
@@ -118,6 +129,16 @@ const TaskForm = ({ initialTask = null, onSubmit, onCancel }) => {
       hour: '2-digit', 
       minute: '2-digit',
       hour12: true 
+    });
+  };
+  
+  // Helper to format date for display
+  const formatDateForDisplay = (date) => {
+    if (!date) return 'No date selected';
+    return date.toLocaleDateString(undefined, { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
     });
   };
   
@@ -164,22 +185,6 @@ const TaskForm = ({ initialTask = null, onSubmit, onCancel }) => {
     setShowCourseDropdown(false);
   };
   
-  // Handle date change
-  const handleDateChange = (event, selectedDate) => {
-    setShowDueDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDueDate(selectedDate);
-    }
-  };
-  
-  // Handle time change
-  const handleTimeChange = (event, selectedTime) => {
-    setShowDueTimePicker(Platform.OS === 'ios');
-    if (selectedTime) {
-      setDueTime(selectedTime);
-    }
-  };
-  
   // Handle reminder time change
   const handleReminderTimeChange = (event, selectedTime) => {
     setShowReminderPicker(Platform.OS === 'ios');
@@ -195,6 +200,12 @@ const TaskForm = ({ initialTask = null, onSubmit, onCancel }) => {
       return;
     }
     
+    // Format date and time for storage
+    const formattedDueDate = dueDate ? dueDate.toISOString().split('T')[0] : null;
+    const formattedDueTime = dueTime ? 
+      `${dueTime.getHours().toString().padStart(2, '0')}:${dueTime.getMinutes().toString().padStart(2, '0')}` : 
+      null;
+    
     // Prepare task data
     const taskData = {
       id: initialTask?.id || generateTaskId(),
@@ -202,8 +213,8 @@ const TaskForm = ({ initialTask = null, onSubmit, onCancel }) => {
       description: description.trim(),
       courseId,
       courseName,
-      dueDate: dueDate ? dueDate.toISOString().split('T')[0] : null,
-      dueTime: dueTime ? formatTimeString(dueTime) : null,
+      dueDate: formattedDueDate,
+      dueTime: formattedDueTime,
       priority,
       category,
       reminderTime: reminderEnabled && reminderTime ? reminderTime.toISOString() : null,
@@ -342,6 +353,7 @@ const TaskForm = ({ initialTask = null, onSubmit, onCancel }) => {
                 mode="time"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={handleTimeChange}
+                is24Hour={true}
               />
             )}
           </View>
@@ -530,13 +542,18 @@ const TaskForm = ({ initialTask = null, onSubmit, onCancel }) => {
         
         {/* Form Actions */}
         <View style={styles.formActions}>
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
+          <GradientButton
+            title="Cancel"
+            onPress={onCancel}
+            style={styles.cancelButton}
+            variant="danger"
+          />
           
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-            <Text style={styles.submitButtonText}>{initialTask ? 'Update Task' : 'Add Task'}</Text>
-          </TouchableOpacity>
+          <GradientButton
+            title={initialTask ? 'Update Task' : 'Add Task'}
+            onPress={handleSubmit}
+            style={styles.submitButton}
+          />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -805,35 +822,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 16,
+    gap: 8,
   },
   cancelButton: {
-    height: 50,
     flex: 1,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: SIZES.buttonRadius,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.primary,
   },
   submitButton: {
-    height: 50,
     flex: 2,
-    backgroundColor: COLORS.primary,
-    borderRadius: SIZES.buttonRadius,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.medium,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.white,
   },
 });
 
