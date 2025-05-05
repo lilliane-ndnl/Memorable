@@ -8,7 +8,9 @@ export default class HomeworkTask {
     priority,
     notes = '',
     attachments = [],
-    isCompleted = false
+    isCompleted = false,
+    type = 'homework',
+    groupId = null
   ) {
     this.id = id;
     this.title = title;
@@ -20,6 +22,8 @@ export default class HomeworkTask {
     this.attachments = attachments; // Array of file URIs
     this.isCompleted = isCompleted;
     this.createdAt = new Date().toISOString();
+    this.type = type; // Type of assignment (homework, exam, etc.)
+    this.groupId = groupId; // Custom group identifier
   }
 
   // Helper method to check if the task is due today

@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  Modal
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { COLORS, SHADOWS } from '../constants/theme';
 import { COURSE_COLORS } from '../constants/theme';
 import { formatDate, formatTime } from '../utils/helpers';
 import { loadCoursesFromStorage } from '../utils/courseHelpers';
+import { loadTaskGroupsFromStorage, createTaskGroup } from '../utils/groupHelpers';
 
 const PRIORITY_OPTIONS = [
   { label: 'High', value: 'high', color: COLORS.danger },
@@ -64,6 +66,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
   const [priority, setPriority] = useState(initialTask?.priority || 'medium');
   const [notes, setNotes] = useState(initialTask?.notes || '');
   const [assignmentType, setAssignmentType] = useState(initialTask?.type || 'homework');
+  const [taskGroup, setTaskGroup] = useState(initialTask?.groupId || null);
   
   // Date & Time picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -76,9 +79,30 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
     color
   })));
   
-  // Load courses from storage
+  // Group state
+  const [groups, setGroups] = useState([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupColor, setNewGroupColor] = useState(COLORS.primary);
+  
+  // Group color options
+  const groupColorOptions = [
+    '#9C27B0', // Purple
+    '#2196F3', // Blue
+    '#4CAF50', // Green
+    '#FFC107', // Amber
+    '#795548', // Brown
+    '#607D8B', // Blue Grey
+    '#FF5722', // Deep Orange
+    '#FF9800', // Orange
+    '#009688', // Teal
+    '#F44336', // Red
+  ];
+  
+  // Load courses and groups from storage
   useEffect(() => {
-    const loadCourses = async () => {
+    const loadData = async () => {
+      // Load courses
       const courses = await loadCoursesFromStorage();
       if (courses && courses.length > 0) {
         // Create course options from saved courses
@@ -90,9 +114,13 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
         
         setCourseOptions(options);
       }
+      
+      // Load groups
+      const taskGroups = await loadTaskGroupsFromStorage();
+      setGroups(taskGroups);
     };
     
-    loadCourses();
+    loadData();
   }, []);
 
   const handleSubmit = () => {
@@ -114,6 +142,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
       priority,
       notes: notes.trim(),
       type: assignmentType,
+      groupId: taskGroup,
     };
 
     onSubmit(taskData);
@@ -133,6 +162,21 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
     if (selectedTime) {
       setDueTime(selectedTime);
     }
+  };
+  
+  // Add new group
+  const handleAddGroup = () => {
+    if (!newGroupName.trim()) {
+      alert('Please enter a group name');
+      return;
+    }
+    
+    const newGroup = createTaskGroup(newGroupName.trim(), newGroupColor);
+    const updatedGroups = [...groups, newGroup];
+    setGroups(updatedGroups);
+    setTaskGroup(newGroup.id);
+    setShowGroupModal(false);
+    setNewGroupName('');
   };
 
   return (
@@ -213,6 +257,54 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
               >
                 <View style={[styles.colorDot, { backgroundColor: option.color }]} />
                 <Text style={styles.optionText}>{option.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+        
+        <View style={styles.formGroup}>
+          <View style={styles.groupHeader}>
+            <Text style={styles.label}>Group (Optional)</Text>
+            <TouchableOpacity
+              style={styles.addGroupButton}
+              onPress={() => setShowGroupModal(true)}
+            >
+              <Ionicons name="add-circle-outline" size={22} color={COLORS.primary} />
+              <Text style={styles.addGroupText}>New Group</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.groupScrollView}
+          >
+            <TouchableOpacity
+              style={[
+                styles.groupButton,
+                !taskGroup && styles.activeGroupButton
+              ]}
+              onPress={() => setTaskGroup(null)}
+            >
+              <Text style={[
+                styles.groupText,
+                !taskGroup && styles.activeGroupText
+              ]}>None</Text>
+            </TouchableOpacity>
+            
+            {groups.map((group) => (
+              <TouchableOpacity
+                key={group.id}
+                style={[
+                  styles.groupButton,
+                  { borderColor: group.color },
+                  taskGroup === group.id && {
+                    backgroundColor: group.color + '40', // 40% opacity
+                  }
+                ]}
+                onPress={() => setTaskGroup(group.id)}
+              >
+                <View style={[styles.colorDot, { backgroundColor: group.color }]} />
+                <Text style={styles.groupText}>{group.name}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -317,6 +409,63 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      {/* Add New Group Modal */}
+      <Modal
+        visible={showGroupModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowGroupModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.groupModalContent}>
+            <Text style={styles.groupModalTitle}>Create New Group</Text>
+            
+            <View style={styles.groupFormItem}>
+              <Text style={styles.groupModalLabel}>Group Name</Text>
+              <TextInput 
+                style={styles.groupInput}
+                value={newGroupName}
+                onChangeText={setNewGroupName}
+                placeholder="Enter group name"
+                placeholderTextColor={COLORS.gray}
+              />
+            </View>
+            
+            <View style={styles.groupFormItem}>
+              <Text style={styles.groupModalLabel}>Group Color</Text>
+              <View style={styles.colorOptions}>
+                {groupColorOptions.map((color) => (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.colorOption,
+                      { backgroundColor: color },
+                      newGroupColor === color && styles.selectedColorOption
+                    ]}
+                    onPress={() => setNewGroupColor(color)}
+                  />
+                ))}
+              </View>
+            </View>
+            
+            <View style={styles.groupModalButtons}>
+              <TouchableOpacity 
+                style={[styles.groupModalButton, styles.cancelGroupButton]}
+                onPress={() => setShowGroupModal(false)}
+              >
+                <Text style={styles.cancelGroupText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.groupModalButton, styles.addGroupModalButton]}
+                onPress={handleAddGroup}
+              >
+                <Text style={styles.addGroupModalText}>Create Group</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -471,6 +620,136 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   submitButtonText: {
+    fontSize: 16,
+    color: COLORS.white,
+    fontWeight: '500',
+  },
+  // Group selection styles
+  groupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addGroupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  addGroupText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  groupScrollView: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  groupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.gray,
+  },
+  activeGroupButton: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  groupText: {
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  activeGroupText: {
+    color: COLORS.white,
+  },
+  // Group modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  groupModalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    ...SHADOWS.medium,
+  },
+  groupModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  groupFormItem: {
+    marginBottom: 16,
+  },
+  groupModalLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  groupInput: {
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  colorOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  colorOption: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    margin: 4,
+  },
+  selectedColorOption: {
+    borderWidth: 2,
+    borderColor: COLORS.black,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  groupModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  groupModalButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  cancelGroupButton: {
+    backgroundColor: COLORS.lightGray,
+    marginRight: 8,
+  },
+  addGroupModalButton: {
+    backgroundColor: COLORS.primary,
+  },
+  cancelGroupText: {
+    fontSize: 16,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
+  addGroupModalText: {
     fontSize: 16,
     color: COLORS.white,
     fontWeight: '500',

@@ -17,6 +17,7 @@ import { COLORS, SHADOWS } from '../constants/theme';
 import AddTaskForm from '../components/AddTaskForm';
 import { loadTasksFromStorage, saveTasksToStorage, formatDisplayDate } from '../utils/helpers';
 import { loadCoursesFromStorage } from '../utils/courseHelpers';
+import { loadTaskGroupsFromStorage, saveTaskGroupsToStorage } from '../utils/groupHelpers';
 
 // Icons for assignment types
 const ASSIGNMENT_ICONS = {
@@ -33,6 +34,14 @@ const ASSIGNMENT_ICONS = {
   other: 'file-tray-outline',
 };
 
+// Task type categories for visual hierarchy
+const TASK_CATEGORIES = {
+  LECTURE: ['lecture'],
+  STUDY: ['reading', 'study', 'discussion', 'study-sessions'],
+  ASSESSMENT: ['exam', 'quiz', 'test'],
+  ASSIGNMENT: ['homework', 'essay', 'paper', 'project', 'presentation', 'lab', 'other'],
+};
+
 const TasksScreen = () => {
   const navigation = useNavigation();
   const [tasks, setTasks] = useState([]);
@@ -40,22 +49,27 @@ const TasksScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [courses, setCourses] = useState([]);
-  const [filter, setFilter] = useState('all'); // 'all', 'today', 'week', 'completed'
+  const [groups, setGroups] = useState([]);
+  const [filter, setFilter] = useState('all'); // 'all', 'today', 'week', 'completed', 'grouped'
+  const [groupFilter, setGroupFilter] = useState(null); // null or groupId
+  const [groupByOption, setGroupByOption] = useState('date'); // 'date', 'course', 'group', 'type'
 
   useEffect(() => {
     loadAllData();
   }, []);
 
-  // When tasks or filter changes, update filtered tasks
+  // When tasks, filter or grouping option changes, update filtered tasks
   useEffect(() => {
     filterTasks(filter);
-  }, [tasks, filter]);
+  }, [tasks, filter, groupByOption, groupFilter]);
 
   const loadAllData = async () => {
     const loadedTasks = await loadTasksFromStorage();
     const loadedCourses = await loadCoursesFromStorage();
+    const loadedGroups = await loadTaskGroupsFromStorage();
     setTasks(loadedTasks);
     setCourses(loadedCourses);
+    setGroups(loadedGroups);
   };
 
   const filterTasks = (filterType) => {
@@ -86,6 +100,17 @@ const TasksScreen = () => {
         break;
       case 'completed':
         filtered = tasks.filter(task => task.completed);
+        break;
+      case 'grouped':
+        // Only show tasks in the selected group
+        if (groupFilter) {
+          const group = groups.find(g => g.id === groupFilter);
+          if (group) {
+            filtered = tasks.filter(task => 
+              group.tasks.includes(task.id)
+            );
+          }
+        }
         break;
       case 'all':
       default:
@@ -123,10 +148,59 @@ const TasksScreen = () => {
       const updatedTasks = [...tasks, newTask];
       setTasks(updatedTasks);
       saveTasksToStorage(updatedTasks);
+      
+      // If the task has a group, add it to that group
+      if (newTask.groupId) {
+        updateTaskInGroups(newTask.id, newTask.groupId);
+      }
+      
+      // If we're grouping by course, automatically add to course group
+      if (groupByOption === 'course' && newTask.courseName) {
+        const courseGroup = groups.find(g => g.name === newTask.courseName);
+        if (courseGroup) {
+          updateTaskInGroups(newTask.id, courseGroup.id);
+        } else {
+          // Create a new course group if it doesn't exist
+          createCourseGroup(newTask.courseName, newTask.id);
+        }
+      }
     }
     
     setModalVisible(false);
     setEditingTask(null);
+  };
+
+  const updateTaskInGroups = async (taskId, groupId) => {
+    const updatedGroups = [...groups];
+    const groupIndex = updatedGroups.findIndex(g => g.id === groupId);
+    
+    if (groupIndex >= 0) {
+      if (!updatedGroups[groupIndex].tasks.includes(taskId)) {
+        updatedGroups[groupIndex].tasks.push(taskId);
+        setGroups(updatedGroups);
+        await saveTaskGroupsToStorage(updatedGroups);
+      }
+    }
+  };
+  
+  const createCourseGroup = async (courseName, taskId) => {
+    // Find course color
+    const course = courses.find(c => c.name === courseName);
+    const courseColor = course?.color || COLORS.primary;
+    
+    // Create a new group for this course
+    const newGroup = {
+      id: `course-${Date.now().toString()}`,
+      name: courseName,
+      color: courseColor,
+      tasks: [taskId],
+      isDefault: false,
+      isCourseGroup: true,
+    };
+    
+    const updatedGroups = [...groups, newGroup];
+    setGroups(updatedGroups);
+    await saveTaskGroupsToStorage(updatedGroups);
   };
 
   const handleToggleComplete = (id) => {
@@ -158,6 +232,14 @@ const TasksScreen = () => {
             const updatedTasks = tasks.filter(task => task.id !== id);
             setTasks(updatedTasks);
             saveTasksToStorage(updatedTasks);
+            
+            // Also remove the task from any groups
+            const updatedGroups = groups.map(group => ({
+              ...group,
+              tasks: group.tasks.filter(taskId => taskId !== id)
+            }));
+            setGroups(updatedGroups);
+            saveTaskGroupsToStorage(updatedGroups);
           },
           style: "destructive"
         }
@@ -175,83 +257,188 @@ const TasksScreen = () => {
   const getTaskIcon = (task) => {
     return ASSIGNMENT_ICONS[task.type] || ASSIGNMENT_ICONS.homework;
   };
+  
+  // Helper to determine task category for visual hierarchy
+  const getTaskCategory = (task) => {
+    const type = task.type.toLowerCase();
+    
+    for (const [category, types] of Object.entries(TASK_CATEGORIES)) {
+      if (types.includes(type)) {
+        return category;
+      }
+    }
+    
+    // Default to ASSIGNMENT if no match
+    return 'ASSIGNMENT';
+  };
+  
+  // Helper to get category style
+  const getCategoryStyle = (category) => {
+    switch (category) {
+      case 'LECTURE':
+        return styles.lectureTask;
+      case 'STUDY':
+        return styles.studyTask;
+      case 'ASSESSMENT':
+        return styles.assessmentTask;
+      case 'ASSIGNMENT':
+      default:
+        return styles.assignmentTask;
+    }
+  };
 
-  // Group tasks by due date for better organization
-  const groupTasksByDate = () => {
+  // Group tasks by the selected option
+  const groupTasks = () => {
+    if (filteredTasks.length === 0) {
+      return [];
+    }
+
     const grouped = {};
     
-    filteredTasks.forEach(task => {
-      if (!grouped[task.dueDate]) {
-        grouped[task.dueDate] = [];
-      }
-      grouped[task.dueDate].push(task);
-    });
+    switch (groupByOption) {
+      case 'course':
+        // Group by course
+        filteredTasks.forEach(task => {
+          const key = task.courseName || 'Uncategorized';
+          if (!grouped[key]) {
+            grouped[key] = [];
+          }
+          grouped[key].push(task);
+        });
+        break;
+      
+      case 'group':
+        // Group by custom group
+        // First, create an "Ungrouped" category
+        grouped['Ungrouped'] = filteredTasks.filter(task => !task.groupId);
+        
+        // Then add tasks to their respective groups
+        groups.forEach(group => {
+          const groupTasks = filteredTasks.filter(task => 
+            task.groupId === group.id
+          );
+          
+          if (groupTasks.length > 0) {
+            grouped[group.name] = groupTasks;
+          }
+        });
+        break;
+      
+      case 'type':
+        // Group by task type/category
+        filteredTasks.forEach(task => {
+          const category = getTaskCategory(task);
+          if (!grouped[category]) {
+            grouped[category] = [];
+          }
+          grouped[category].push(task);
+        });
+        break;
+      
+      case 'date':
+      default:
+        // Group by due date (default)
+        filteredTasks.forEach(task => {
+          if (!grouped[task.dueDate]) {
+            grouped[task.dueDate] = [];
+          }
+          grouped[task.dueDate].push(task);
+        });
+        break;
+    }
     
     // Convert to array format for FlatList
-    return Object.entries(grouped).map(([date, tasks]) => ({
-      date,
+    return Object.entries(grouped).map(([label, tasks]) => ({
+      label,
       tasks,
+      isDate: groupByOption === 'date', // Special case for date formatting
     }));
   };
 
-  const renderTaskItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.taskItem,
-        { borderLeftColor: getCourseColor(item.courseName) },
-        item.completed && styles.completedTask
-      ]}
-      onPress={() => handleEditTask(item)}
-    >
+  const renderTaskItem = ({ item }) => {
+    const taskCategory = getTaskCategory(item.tasks[0]);
+    const categoryStyle = getCategoryStyle(taskCategory);
+    
+    return (
       <TouchableOpacity
         style={[
-          styles.completeButton,
-          item.completed && styles.completedButton
+          styles.taskItem,
+          categoryStyle,
+          { borderLeftColor: getCourseColor(item.tasks[0].courseName) },
+          item.tasks[0].completed && styles.completedTask
         ]}
-        onPress={() => handleToggleComplete(item.id)}
+        onPress={() => handleEditTask(item.tasks[0])}
       >
-        {item.completed && (
-          <Ionicons name="checkmark" size={18} color={COLORS.white} />
-        )}
-      </TouchableOpacity>
-      
-      <View style={styles.taskContent}>
-        <View style={styles.taskHeader}>
-          <Text style={[styles.taskTitle, item.completed && styles.completedText]}>
-            {item.title}
-          </Text>
-          <Ionicons name={getTaskIcon(item)} size={20} color={getCourseColor(item.courseName)} />
+        <TouchableOpacity
+          style={[
+            styles.completeButton,
+            item.tasks[0].completed && styles.completedButton
+          ]}
+          onPress={() => handleToggleComplete(item.tasks[0].id)}
+        >
+          {item.tasks[0].completed && (
+            <Ionicons name="checkmark" size={18} color={COLORS.white} />
+          )}
+        </TouchableOpacity>
+        
+        <View style={styles.taskContent}>
+          <View style={styles.taskHeader}>
+            <Text style={[styles.taskTitle, item.tasks[0].completed && styles.completedText]}>
+              {item.tasks[0].title}
+            </Text>
+            <Ionicons name={getTaskIcon(item.tasks[0])} size={20} color={getCourseColor(item.tasks[0].courseName)} />
+          </View>
+          
+          <View style={styles.taskDetails}>
+            <Text style={styles.courseText}>{item.tasks[0].courseName}</Text>
+            <Text style={styles.timeText}>{item.tasks[0].dueTime}</Text>
+          </View>
+          
+          {/* Show group tag if task is in a group */}
+          {item.tasks[0].groupId && (
+            <View style={styles.taskGroupInfo}>
+              {groups.filter(g => g.id === item.tasks[0].groupId).map(group => (
+                <View 
+                  key={group.id} 
+                  style={[styles.groupTag, { backgroundColor: group.color + '30' }]}
+                >
+                  <Text style={[styles.groupTagText, { color: group.color }]}>
+                    {group.name}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          
+          {item.tasks[0].notes && (
+            <Text style={styles.notes} numberOfLines={2}>{item.tasks[0].notes}</Text>
+          )}
         </View>
         
-        <View style={styles.taskDetails}>
-          <Text style={styles.courseText}>{item.courseName}</Text>
-          <Text style={styles.timeText}>{item.dueTime}</Text>
-        </View>
-        
-        {item.notes && (
-          <Text style={styles.notes} numberOfLines={2}>{item.notes}</Text>
-        )}
-      </View>
-      
-      <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() => handleDeleteTask(item.id)}
-      >
-        <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDeleteTask(item.tasks[0].id)}
+        >
+          <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
-  );
+    );
+  };
 
-  const renderDateGroup = ({ item }) => (
+  const renderGroupHeader = ({ item }) => (
     <View style={styles.dateGroup}>
       <View style={styles.dateHeader}>
-        <Text style={styles.dateText}>{formatDisplayDate(item.date)}</Text>
+        {item.isDate ? (
+          <Text style={styles.dateText}>{formatDisplayDate(item.label)}</Text>
+        ) : (
+          <Text style={styles.groupHeaderText}>{item.label}</Text>
+        )}
         <View style={styles.dateLine} />
       </View>
       
       {item.tasks.map(task => (
         <View key={task.id}>
-          {renderTaskItem({ item: task })}
+          {renderTaskItem({ item: { tasks: [task] } })}
         </View>
       ))}
     </View>
@@ -274,6 +461,49 @@ const TasksScreen = () => {
         <Text style={styles.emptyButtonText}>Add Your First Task</Text>
       </TouchableOpacity>
     </View>
+  );
+  
+  // Render group filter pills when in "grouped" filter
+  const renderGroupFilters = () => (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      style={styles.groupFiltersContainer}
+    >
+      <TouchableOpacity
+        style={[
+          styles.groupFilterPill,
+          !groupFilter && styles.activeGroupFilterPill
+        ]}
+        onPress={() => setGroupFilter(null)}
+      >
+        <Text style={[
+          styles.groupFilterText,
+          !groupFilter && styles.activeGroupFilterText
+        ]}>All Groups</Text>
+      </TouchableOpacity>
+      
+      {groups.map(group => (
+        <TouchableOpacity
+          key={group.id}
+          style={[
+            styles.groupFilterPill,
+            { borderColor: group.color },
+            groupFilter === group.id && {
+              backgroundColor: group.color + '30',
+              borderColor: group.color,
+            }
+          ]}
+          onPress={() => setGroupFilter(group.id)}
+        >
+          <View style={[styles.colorDot, { backgroundColor: group.color }]} />
+          <Text style={[
+            styles.groupFilterText,
+            groupFilter === group.id && { color: group.color }
+          ]}>{group.name}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
   );
 
   return (
@@ -347,6 +577,23 @@ const TasksScreen = () => {
           <TouchableOpacity
             style={[
               styles.filterButton,
+              filter === 'grouped' && styles.activeFilterButton
+            ]}
+            onPress={() => filterTasks('grouped')}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filter === 'grouped' && styles.activeFilterText
+              ]}
+            >
+              Groups
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
               filter === 'completed' && styles.activeFilterButton
             ]}
             onPress={() => filterTasks('completed')}
@@ -363,13 +610,110 @@ const TasksScreen = () => {
         </ScrollView>
       </View>
       
+      {/* Group by options */}
+      <View style={styles.groupByContainer}>
+        <Text style={styles.groupByLabel}>Group by:</Text>
+        <View style={styles.groupByButtons}>
+          <TouchableOpacity
+            style={[
+              styles.groupByButton,
+              groupByOption === 'date' && styles.activeGroupByButton
+            ]}
+            onPress={() => setGroupByOption('date')}
+          >
+            <Ionicons 
+              name="calendar-outline" 
+              size={16} 
+              color={groupByOption === 'date' ? COLORS.white : COLORS.primary} 
+            />
+            <Text 
+              style={[
+                styles.groupByText,
+                groupByOption === 'date' && styles.activeGroupByText
+              ]}
+            >
+              Date
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.groupByButton,
+              groupByOption === 'course' && styles.activeGroupByButton
+            ]}
+            onPress={() => setGroupByOption('course')}
+          >
+            <Ionicons 
+              name="school-outline" 
+              size={16} 
+              color={groupByOption === 'course' ? COLORS.white : COLORS.primary} 
+            />
+            <Text 
+              style={[
+                styles.groupByText,
+                groupByOption === 'course' && styles.activeGroupByText
+              ]}
+            >
+              Course
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.groupByButton,
+              groupByOption === 'group' && styles.activeGroupByButton
+            ]}
+            onPress={() => setGroupByOption('group')}
+          >
+            <Ionicons 
+              name="folder-outline" 
+              size={16} 
+              color={groupByOption === 'group' ? COLORS.white : COLORS.primary} 
+            />
+            <Text 
+              style={[
+                styles.groupByText,
+                groupByOption === 'group' && styles.activeGroupByText
+              ]}
+            >
+              Group
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.groupByButton,
+              groupByOption === 'type' && styles.activeGroupByButton
+            ]}
+            onPress={() => setGroupByOption('type')}
+          >
+            <Ionicons 
+              name="apps-outline" 
+              size={16} 
+              color={groupByOption === 'type' ? COLORS.white : COLORS.primary} 
+            />
+            <Text 
+              style={[
+                styles.groupByText,
+                groupByOption === 'type' && styles.activeGroupByText
+              ]}
+            >
+              Type
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      
+      {/* Group filters (only shown when filter is "grouped") */}
+      {filter === 'grouped' && renderGroupFilters()}
+      
       {filteredTasks.length === 0 ? (
         renderEmptyState()
       ) : (
         <FlatList
-          data={groupTasksByDate()}
-          keyExtractor={(item) => item.date}
-          renderItem={renderDateGroup}
+          data={groupTasks()}
+          keyExtractor={(item) => item.label}
+          renderItem={renderGroupHeader}
           contentContainerStyle={styles.list}
         />
       )}
@@ -469,6 +813,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.primary,
+    marginRight: 10,
+  },
+  groupHeaderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
     marginRight: 10,
   },
   dateLine: {
@@ -591,6 +941,115 @@ const styles = StyleSheet.create({
     padding: 20,
     marginTop: 50,
     ...SHADOWS.dark,
+  },
+  // Group by styles
+  groupByContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  groupByLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.gray,
+    marginRight: 10,
+  },
+  groupByButtons: {
+    flexDirection: 'row',
+    flex: 1,
+  },
+  groupByButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  activeGroupByButton: {
+    backgroundColor: COLORS.primary,
+  },
+  groupByText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    marginLeft: 4,
+  },
+  activeGroupByText: {
+    color: COLORS.white,
+  },
+  // Task category styles for visual hierarchy
+  lectureTask: {
+    borderRightWidth: 4,
+    borderRightColor: '#9C27B0', // Purple for lectures
+  },
+  studyTask: {
+    borderRightWidth: 4,
+    borderRightColor: '#009688', // Teal for study sessions
+  },
+  assessmentTask: {
+    borderRightWidth: 4,
+    borderRightColor: '#F44336', // Red for assessments
+  },
+  assignmentTask: {
+    // Default style (no additional styling needed)
+  },
+  // Group tag styles
+  taskGroupInfo: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  groupTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  groupTagText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  // Group filter styles
+  groupFiltersContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  groupFilterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.gray,
+  },
+  activeGroupFilterPill: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  groupFilterText: {
+    fontSize: 12,
+    color: COLORS.text,
+  },
+  activeGroupFilterText: {
+    color: COLORS.white,
+  },
+  colorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
   },
 });
 
