@@ -8,10 +8,11 @@ import {
   FlatList,
   ScrollView,
   Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { COLORS, SHADOWS } from '../constants/theme';
+import { COLORS, SHADOWS, SIZES } from '../constants/theme';
 import {
   getDaysOfWeek,
   getDefaultCourseColors,
@@ -32,6 +33,16 @@ const CourseForm = ({ onSubmit, onCancel, initialCourse = null }) => {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   
+  // Add course start/end dates
+  const [courseStartDate, setCourseStartDate] = useState(new Date());
+  const [courseEndDate, setCourseEndDate] = useState(() => {
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 4); // Default to roughly a semester
+    return endDate;
+  });
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  
   const colorOptions = getDefaultCourseColors();
   const daysOfWeek = getDaysOfWeek();
 
@@ -40,6 +51,14 @@ const CourseForm = ({ onSubmit, onCancel, initialCourse = null }) => {
       setCourseName(initialCourse.name);
       setSelectedColor(initialCourse.color);
       setSchedule(initialCourse.schedule || []);
+      
+      // Set start/end dates if they exist
+      if (initialCourse.startDate) {
+        setCourseStartDate(new Date(initialCourse.startDate));
+      }
+      if (initialCourse.endDate) {
+        setCourseEndDate(new Date(initialCourse.endDate));
+      }
     } else {
       setSelectedColor(colorOptions[0]);
     }
@@ -55,6 +74,40 @@ const CourseForm = ({ onSubmit, onCancel, initialCourse = null }) => {
     minutes = minutes < 10 ? '0' + minutes : minutes;
     
     return `${hours}:${minutes} ${ampm}`;
+  };
+  
+  const formatDate = (date) => {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Handle date pickers
+  const onStartDateChange = (event, selectedDate) => {
+    const currentDate = selectedDate || courseStartDate;
+    setShowStartDatePicker(Platform.OS === 'ios');
+    setCourseStartDate(currentDate);
+  };
+
+  const onEndDateChange = (event, selectedDate) => {
+    const currentDate = selectedDate || courseEndDate;
+    setShowEndDatePicker(Platform.OS === 'ios');
+    setCourseEndDate(currentDate);
+  };
+  
+  // Handle time pickers
+  const onStartTimeChange = (event, selectedTime) => {
+    const currentTime = selectedTime || startTime;
+    setShowStartTimePicker(Platform.OS === 'ios');
+    setStartTime(currentTime);
+  };
+
+  const onEndTimeChange = (event, selectedTime) => {
+    const currentTime = selectedTime || endTime;
+    setShowEndTimePicker(Platform.OS === 'ios');
+    setEndTime(currentTime);
   };
 
   const handleAddScheduleItem = () => {
@@ -134,6 +187,8 @@ const CourseForm = ({ onSubmit, onCancel, initialCourse = null }) => {
       name: courseName,
       color: selectedColor,
       schedule,
+      startDate: courseStartDate.toISOString(),
+      endDate: courseEndDate.toISOString()
     });
   };
 
@@ -172,8 +227,57 @@ const CourseForm = ({ onSubmit, onCancel, initialCourse = null }) => {
           ))}
         </View>
         
+        {/* Add course duration section */}
+        <Text style={styles.sectionTitle}>Course Duration</Text>
+        <View style={styles.dateRow}>
+          <View style={styles.dateField}>
+            <Text style={styles.label}>Start Date</Text>
+            <TouchableOpacity 
+              style={styles.dateButton}
+              onPress={() => setShowStartDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.dateText}>
+                {formatDate(courseStartDate)}
+              </Text>
+            </TouchableOpacity>
+            {showStartDatePicker && (
+              <DateTimePicker
+                testID="startDatePicker"
+                value={courseStartDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onStartDateChange}
+              />
+            )}
+          </View>
+          
+          <View style={styles.dateField}>
+            <Text style={styles.label}>End Date</Text>
+            <TouchableOpacity 
+              style={styles.dateButton}
+              onPress={() => setShowEndDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.dateText}>
+                {formatDate(courseEndDate)}
+              </Text>
+            </TouchableOpacity>
+            {showEndDatePicker && (
+              <DateTimePicker
+                testID="endDatePicker"
+                value={courseEndDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onEndDateChange}
+                minimumDate={courseStartDate}
+              />
+            )}
+          </View>
+        </View>
+        
         <View style={styles.scheduleHeader}>
-          <Text style={styles.label}>Class Schedule</Text>
+          <Text style={styles.sectionTitle}>Class Schedule</Text>
           <TouchableOpacity 
             style={styles.addScheduleButton}
             onPress={handleAddScheduleItem}
@@ -248,75 +352,69 @@ const CourseForm = ({ onSubmit, onCancel, initialCourse = null }) => {
             </Text>
             
             <Text style={styles.label}>Day of Week</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayPicker}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.dayScrollView}
+            >
               {daysOfWeek.map((day) => (
                 <TouchableOpacity
                   key={day}
                   style={[
-                    styles.dayOption,
-                    selectedDay === day && styles.selectedDayOption,
+                    styles.dayButton,
+                    selectedDay === day && styles.selectedDayButton
                   ]}
                   onPress={() => setSelectedDay(day)}
                 >
-                  <Text 
-                    style={[
-                      styles.dayText,
-                      selectedDay === day && styles.selectedDayText,
-                    ]}
-                  >
-                    {day.substring(0, 3)}
+                  <Text style={[
+                    styles.dayButtonText,
+                    selectedDay === day && styles.selectedDayText
+                  ]}>
+                    {day}
                   </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
             
-            <View style={styles.timePickerRow}>
-              <View style={styles.timePickerColumn}>
+            <View style={styles.timeContainer}>
+              <View style={styles.timeField}>
                 <Text style={styles.label}>Start Time</Text>
-                <TouchableOpacity 
-                  style={styles.timeInput}
+                <TouchableOpacity
+                  style={styles.timeButton}
                   onPress={() => setShowStartTimePicker(true)}
                 >
+                  <Ionicons name="time-outline" size={20} color={COLORS.primary} />
                   <Text style={styles.timeText}>{formatTime(startTime)}</Text>
-                  <Ionicons name="time" size={18} color={COLORS.primary} />
                 </TouchableOpacity>
                 {showStartTimePicker && (
-                  <DateTimePicker
+                  <DateTimePicker 
+                    testID="startTimePicker"
                     value={startTime}
                     mode="time"
                     is24Hour={false}
-                    display="default"
-                    onChange={(event, selectedTime) => {
-                      setShowStartTimePicker(false);
-                      if (selectedTime) {
-                        setStartTime(selectedTime);
-                      }
-                    }}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onStartTimeChange}
                   />
                 )}
               </View>
               
-              <View style={styles.timePickerColumn}>
+              <View style={styles.timeField}>
                 <Text style={styles.label}>End Time</Text>
-                <TouchableOpacity 
-                  style={styles.timeInput}
+                <TouchableOpacity
+                  style={styles.timeButton}
                   onPress={() => setShowEndTimePicker(true)}
                 >
+                  <Ionicons name="time-outline" size={20} color={COLORS.primary} />
                   <Text style={styles.timeText}>{formatTime(endTime)}</Text>
-                  <Ionicons name="time" size={18} color={COLORS.primary} />
                 </TouchableOpacity>
                 {showEndTimePicker && (
-                  <DateTimePicker
+                  <DateTimePicker 
+                    testID="endTimePicker"
                     value={endTime}
                     mode="time"
                     is24Hour={false}
-                    display="default"
-                    onChange={(event, selectedTime) => {
-                      setShowEndTimePicker(false);
-                      if (selectedTime) {
-                        setEndTime(selectedTime);
-                      }
-                    }}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onEndTimeChange}
                   />
                 )}
               </View>
@@ -327,7 +425,7 @@ const CourseForm = ({ onSubmit, onCancel, initialCourse = null }) => {
               style={styles.input}
               value={location}
               onChangeText={setLocation}
-              placeholder="Enter location"
+              placeholder="Enter classroom or building"
               placeholderTextColor={COLORS.gray}
             />
             
@@ -375,9 +473,16 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 8,
   },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+    marginBottom: 12,
+  },
   input: {
     backgroundColor: COLORS.lightGray,
-    borderRadius: 8,
+    borderRadius: SIZES.buttonRadius - 4,
     padding: 12,
     fontSize: 16,
     color: COLORS.text,
@@ -400,6 +505,28 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: COLORS.white,
     ...SHADOWS.medium,
+  },
+  // Date row styles
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  dateField: {
+    flex: 1,
+    marginRight: 8,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.lightGray,
+    borderRadius: SIZES.buttonRadius - 4,
+    padding: 12,
+  },
+  dateText: {
+    fontSize: 14,
+    color: COLORS.text,
+    marginLeft: 8,
   },
   scheduleHeader: {
     flexDirection: 'row',
@@ -428,7 +555,7 @@ const styles = StyleSheet.create({
   scheduleItem: {
     flexDirection: 'row',
     backgroundColor: COLORS.white,
-    borderRadius: 8,
+    borderRadius: SIZES.buttonRadius - 4,
     padding: 12,
     marginBottom: 8,
     ...SHADOWS.light,
@@ -456,22 +583,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   editButton: {
-    padding: 6,
-    marginRight: 8,
+    padding: 8,
+    marginRight: 4,
   },
   deleteButton: {
-    padding: 6,
+    padding: 8,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingVertical: 16,
   },
   button: {
     flex: 1,
-    padding: 16,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: SIZES.buttonRadius,
+    ...SHADOWS.light,
   },
   cancelButton: {
     backgroundColor: COLORS.lightGray,
@@ -481,16 +610,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   cancelButtonText: {
-    color: COLORS.text,
     fontSize: 16,
+    color: COLORS.text,
     fontWeight: '500',
   },
   submitButtonText: {
-    color: COLORS.white,
     fontSize: 16,
+    color: COLORS.white,
     fontWeight: '500',
   },
-  // Modal styles
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -499,10 +627,11 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    width: '100%',
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.buttonRadius,
     padding: 20,
+    width: '100%',
+    maxWidth: 500,
     ...SHADOWS.medium,
   },
   modalTitle: {
@@ -512,52 +641,49 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
-  dayPicker: {
-    flexDirection: 'row',
+  dayScrollView: {
     marginBottom: 16,
   },
-  dayOption: {
-    padding: 10,
-    borderRadius: 8,
+  dayButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: SIZES.buttonRadius - 4,
     marginRight: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.lightGray,
-    minWidth: 60,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
   },
-  selectedDayOption: {
+  selectedDayButton: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
-  dayText: {
+  dayButtonText: {
+    fontSize: 14,
     color: COLORS.text,
-    fontWeight: '500',
   },
   selectedDayText: {
     color: COLORS.white,
+    fontWeight: '500',
   },
-  timePickerRow: {
+  timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  timePickerColumn: {
-    flex: 1,
-  },
-  timePickerColumn: {
+  timeField: {
     flex: 1,
     marginRight: 8,
   },
-  timeInput: {
+  timeButton: {
     flexDirection: 'row',
-    backgroundColor: COLORS.lightGray,
-    borderRadius: 8,
-    padding: 12,
-    justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: COLORS.lightGray,
+    borderRadius: SIZES.buttonRadius - 4,
+    padding: 12,
   },
   timeText: {
-    fontSize: 16,
+    fontSize: 14,
     color: COLORS.text,
+    marginLeft: 8,
   },
 });
 
