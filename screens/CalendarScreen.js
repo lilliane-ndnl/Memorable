@@ -7,15 +7,17 @@ import {
   FlatList,
   ScrollView,
   SafeAreaView,
-  Modal
+  Modal,
+  Platform
 } from 'react-native';
 import { Calendar, Agenda } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { COLORS, SHADOWS } from '../constants/theme';
+import { COLORS, SHADOWS, SIZES } from '../constants/theme';
 import { loadCoursesFromStorage, getCoursesAsMarkedDates } from '../utils/courseHelpers';
 import { loadTasksFromStorage, getTasksAsMarkedDates as getTaskMarks, getTasksForDate } from '../utils/helpers';
 import AddTaskForm from '../components/AddTaskForm';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // View mode constants
 const VIEW_MODES = {
@@ -62,9 +64,61 @@ const CalendarScreen = () => {
     // Merge all markers
     const mergedDates = {};
     
-    // Add course markers
+    // Add course markers with more frequency - show each class day
+    courses.forEach(course => {
+      // Only process courses with start/end dates
+      if (course.startDate && course.endDate) {
+        const startDate = new Date(course.startDate);
+        const endDate = new Date(course.endDate);
+        
+        // Get all dates between start and end
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          const dateString = currentDate.toISOString().split('T')[0];
+          const dayOfWeek = currentDate.toLocaleDateString('en-US', { weekday: 'long' });
+          
+          // Check if there's a class session on this day
+          const hasClassOnDay = course.schedule.some(session => session.day === dayOfWeek);
+          
+          if (hasClassOnDay) {
+            if (!mergedDates[dateString]) {
+              mergedDates[dateString] = { dots: [] };
+            } else if (!mergedDates[dateString].dots) {
+              mergedDates[dateString].dots = [];
+            }
+            
+            // Add class session dot
+            mergedDates[dateString].dots.push({
+              key: `course_${course.id}_${dateString}`,
+              color: course.color,
+              selectedDotColor: 'white'
+            });
+          }
+          
+          // Move to next day
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      }
+    });
+    
+    // Add course markers from the original function (for backwards compatibility)
     Object.keys(courseMarkedDates).forEach(date => {
-      mergedDates[date] = courseMarkedDates[date];
+      if (!mergedDates[date]) {
+        mergedDates[date] = courseMarkedDates[date];
+      } else {
+        // Merge dots if needed
+        if (courseMarkedDates[date].dots) {
+          if (!mergedDates[date].dots) {
+            mergedDates[date].dots = [];
+          }
+          
+          courseMarkedDates[date].dots.forEach(dot => {
+            if (!mergedDates[date].dots.some(d => d.key === dot.key)) {
+              mergedDates[date].dots.push(dot);
+            }
+          });
+        }
+      }
     });
     
     // Add task markers
@@ -275,32 +329,36 @@ const CalendarScreen = () => {
   
   // Render the appropriate calendar view based on view mode
   const renderCalendarView = () => {
-    if (viewMode === VIEW_MODES.MONTH) {
-      return (
-        <Calendar
-          style={styles.calendar}
-          markedDates={markedDates}
-          onDayPress={(day) => setSelectedDate(day.dateString)}
-          markingType={'multi-dot'}
-          theme={{
-            calendarBackground: COLORS.background,
-            textSectionTitleColor: COLORS.text,
-            selectedDayBackgroundColor: COLORS.primary,
-            selectedDayTextColor: COLORS.white,
-            todayTextColor: COLORS.primary,
-            dayTextColor: COLORS.text,
-            textDisabledColor: COLORS.gray,
-            dotColor: COLORS.primary,
-            selectedDotColor: COLORS.white,
-            arrowColor: COLORS.primary,
-            monthTextColor: COLORS.text,
-            indicatorColor: COLORS.primary,
-          }}
-        />
-      );
-    } else {
-      return renderMultiDayView();
-    }
+    return (
+      <Calendar
+        current={selectedDate}
+        onDayPress={(day) => setSelectedDate(day.dateString)}
+        markedDates={markedDates}
+        markingType={'multi-dot'}
+        // Apply updated theme colors
+        theme={{
+          calendarBackground: COLORS.white,
+          textSectionTitleColor: COLORS.primary,
+          textSectionTitleDisabledColor: COLORS.gray,
+          selectedDayBackgroundColor: COLORS.primary,
+          selectedDayTextColor: COLORS.white,
+          todayTextColor: COLORS.primary,
+          dayTextColor: COLORS.text,
+          textDisabledColor: COLORS.lightGray,
+          dotColor: COLORS.primary,
+          selectedDotColor: COLORS.white,
+          arrowColor: COLORS.primary,
+          monthTextColor: COLORS.text,
+          indicatorColor: COLORS.primary,
+          textDayFontWeight: '300',
+          textMonthFontWeight: 'bold',
+          textDayHeaderFontWeight: '500',
+          textDayFontSize: 16,
+          textMonthFontSize: 16,
+          textDayHeaderFontSize: 14,
+        }}
+      />
+    );
   };
   
   // Render daily events list (for month view)
@@ -378,109 +436,98 @@ const CalendarScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{getHeaderText()}</Text>
-        <View style={styles.headerButtons}>
+        <Text style={styles.headerText}>{getHeaderText()}</Text>
+        <View style={styles.buttonGroup}>
           <TouchableOpacity 
-            style={[styles.headerButton, styles.headerButtonSpace]}
-            onPress={() => navigation.navigate('courses')}
+            style={[
+              styles.viewButton, 
+              viewMode === VIEW_MODES.DAY && styles.activeViewButton
+            ]}
+            onPress={() => changeViewMode(VIEW_MODES.DAY)}
           >
-            <Ionicons name="school" size={22} color={COLORS.primary} />
+            <Text style={[
+              styles.viewButtonText,
+              viewMode === VIEW_MODES.DAY && styles.activeViewText
+            ]}>Day</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={() => setModalVisible(true)}
+            style={[
+              styles.viewButton, 
+              viewMode === VIEW_MODES.THREE_DAYS && styles.activeViewButton
+            ]}
+            onPress={() => changeViewMode(VIEW_MODES.THREE_DAYS)}
           >
-            <Ionicons name="add" size={22} color={COLORS.primary} />
+            <Text style={[
+              styles.viewButtonText,
+              viewMode === VIEW_MODES.THREE_DAYS && styles.activeViewText
+            ]}>3 Days</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[
+              styles.viewButton, 
+              viewMode === VIEW_MODES.WEEK && styles.activeViewButton
+            ]}
+            onPress={() => changeViewMode(VIEW_MODES.WEEK)}
+          >
+            <Text style={[
+              styles.viewButtonText,
+              viewMode === VIEW_MODES.WEEK && styles.activeViewText
+            ]}>Week</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[
+              styles.viewButton, 
+              viewMode === VIEW_MODES.MONTH && styles.activeViewButton
+            ]}
+            onPress={() => changeViewMode(VIEW_MODES.MONTH)}
+          >
+            <Text style={[
+              styles.viewButtonText,
+              viewMode === VIEW_MODES.MONTH && styles.activeViewText
+            ]}>Month</Text>
           </TouchableOpacity>
         </View>
       </View>
       
-      <View style={styles.viewModeSelector}>
-        <TouchableOpacity
-          style={[
-            styles.viewModeButton,
-            viewMode === VIEW_MODES.DAY && styles.activeViewModeButton
-          ]}
-          onPress={() => changeViewMode(VIEW_MODES.DAY)}
-        >
-          <Text
-            style={[
-              styles.viewModeText,
-              viewMode === VIEW_MODES.DAY && styles.activeViewModeText
-            ]}
-          >
-            1 Day
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[
-            styles.viewModeButton,
-            viewMode === VIEW_MODES.THREE_DAYS && styles.activeViewModeButton
-          ]}
-          onPress={() => changeViewMode(VIEW_MODES.THREE_DAYS)}
-        >
-          <Text
-            style={[
-              styles.viewModeText,
-              viewMode === VIEW_MODES.THREE_DAYS && styles.activeViewModeText
-            ]}
-          >
-            3 Days
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[
-            styles.viewModeButton,
-            viewMode === VIEW_MODES.WEEK && styles.activeViewModeButton
-          ]}
-          onPress={() => changeViewMode(VIEW_MODES.WEEK)}
-        >
-          <Text
-            style={[
-              styles.viewModeText,
-              viewMode === VIEW_MODES.WEEK && styles.activeViewModeText
-            ]}
-          >
-            7 Days
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[
-            styles.viewModeButton,
-            viewMode === VIEW_MODES.MONTH && styles.activeViewModeButton
-          ]}
-          onPress={() => changeViewMode(VIEW_MODES.MONTH)}
-        >
-          <Text
-            style={[
-              styles.viewModeText,
-              viewMode === VIEW_MODES.MONTH && styles.activeViewModeText
-            ]}
-          >
-            Month
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.calendarContainer}>
+        {viewMode === VIEW_MODES.MONTH ? renderCalendarView() : renderMultiDayView()}
       </View>
       
-      {renderCalendarView()}
-      
-      {viewMode === VIEW_MODES.MONTH && renderDailyEvents()}
+      {viewMode === VIEW_MODES.MONTH && (
+        <>
+          <View style={styles.eventsHeader}>
+            <Text style={styles.eventsHeaderText}>
+              Events for {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
+            <TouchableOpacity 
+              style={styles.addButton}
+              onPress={() => setModalVisible(true)}
+            >
+              <LinearGradient
+                colors={COLORS.gradientPrimary}
+                style={styles.gradientButton}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons name="add" size={24} color={COLORS.white} />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+          {renderDailyEvents()}
+        </>
+      )}
       
       <Modal
         visible={modalVisible}
-        transparent={true}
         animationType="slide"
+        transparent={true}
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <AddTaskForm 
-              onSubmit={handleAddTask} 
+              onSubmit={handleAddTask}
               onCancel={() => setModalVisible(false)}
-              initialTask={{ dueDate: selectedDate }}
             />
           </View>
         </View>
@@ -492,59 +539,72 @@ const CalendarScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
+    padding: 16,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
   },
-  headerTitle: {
+  headerText: {
     fontSize: 20,
     fontWeight: '600',
-    color: COLORS.black,
+    color: COLORS.text,
+    marginBottom: 12,
+    textAlign: 'center',
   },
-  headerButtons: {
+  buttonGroup: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.lightGray,
+    borderRadius: SIZES.buttonRadius,
+    padding: 4,
   },
-  headerButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: COLORS.secondary,
-  },
-  headerButtonSpace: {
-    marginRight: 8,
-  },
-  viewModeSelector: {
-    flexDirection: 'row',
-    padding: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-  },
-  viewModeButton: {
+  viewButton: {
     flex: 1,
-    alignItems: 'center',
     paddingVertical: 8,
-    borderRadius: 6,
-    marginHorizontal: 4,
+    alignItems: 'center',
+    borderRadius: SIZES.buttonRadius - 4,
   },
-  activeViewModeButton: {
+  activeViewButton: {
     backgroundColor: COLORS.primary,
   },
-  viewModeText: {
+  viewButtonText: {
     fontSize: 14,
     color: COLORS.text,
   },
-  activeViewModeText: {
+  activeViewText: {
     color: COLORS.white,
     fontWeight: '500',
   },
-  calendar: {
-    paddingBottom: 10,
+  calendarContainer: {
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
+  },
+  eventsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: COLORS.white,
+  },
+  eventsHeaderText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...SHADOWS.light,
+  },
+  gradientButton: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   eventSection: {
     flex: 1,
@@ -702,10 +762,13 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   eventItem: {
-    padding: 6,
-    borderRadius: 4,
-    borderLeftWidth: 2,
-    marginBottom: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.buttonRadius - 4,
+    padding: 12,
+    marginBottom: 8,
+    borderLeftWidth: 4,
     ...SHADOWS.light,
   },
   eventTitle: {
@@ -724,16 +787,17 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    marginTop: 50,
-    ...SHADOWS.dark,
+    width: '90%',
+    maxWidth: 500,
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.buttonRadius,
+    padding: 16,
+    ...SHADOWS.medium,
   },
 });
 
