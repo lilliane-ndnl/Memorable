@@ -17,6 +17,7 @@ import { COURSE_COLORS } from '../constants/theme';
 import { formatDate, formatTime } from '../utils/helpers';
 import { loadCoursesFromStorage } from '../utils/courseHelpers';
 import { loadTaskGroupsFromStorage, createTaskGroup } from '../utils/groupHelpers';
+import SubTaskList from './SubTaskList';
 
 const PRIORITY_OPTIONS = [
   { label: 'High', value: 'high', color: COLORS.danger },
@@ -34,6 +35,9 @@ const ASSIGNMENT_TYPES = [
   { label: 'Presentation', value: 'presentation', icon: 'easel-outline' },
   { label: 'Lab', value: 'lab', icon: 'flask-outline' },
 ];
+
+// Assignment types that typically benefit from subtasks
+const SUBTASK_ENABLED_TYPES = ['essay', 'project', 'presentation', 'homework'];
 
 const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
   // State for form fields
@@ -67,6 +71,8 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
   const [notes, setNotes] = useState(initialTask?.notes || '');
   const [assignmentType, setAssignmentType] = useState(initialTask?.type || 'homework');
   const [taskGroup, setTaskGroup] = useState(initialTask?.groupId || null);
+  const [subTasks, setSubTasks] = useState(initialTask?.subTasks || []);
+  const [showSubTasks, setShowSubTasks] = useState(false);
   
   // Date & Time picker state
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -122,6 +128,11 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
     
     loadData();
   }, []);
+  
+  // Show/hide subtasks based on the assignment type
+  useEffect(() => {
+    setShowSubTasks(SUBTASK_ENABLED_TYPES.includes(assignmentType));
+  }, [assignmentType]);
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -143,6 +154,7 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
       notes: notes.trim(),
       type: assignmentType,
       groupId: taskGroup,
+      subTasks: subTasks,
     };
 
     onSubmit(taskData);
@@ -178,6 +190,60 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
     setShowGroupModal(false);
     setNewGroupName('');
   };
+  
+  // Handle sub-tasks change
+  const handleSubTasksChange = (updatedSubTasks) => {
+    setSubTasks(updatedSubTasks);
+  };
+  
+  // Generate default subtasks for certain assignment types
+  const generateDefaultSubTasks = (type) => {
+    const formattedDate = formatDate(dueDate);
+    let defaultTasks = [];
+    
+    switch (type) {
+      case 'essay':
+        defaultTasks = [
+          { id: Date.now() + '-1', title: 'Research', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-2', title: 'Outline', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-3', title: 'Draft', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-4', title: 'Citations', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-5', title: 'Final Edit', completed: false, dueDate: formattedDate },
+        ];
+        break;
+      case 'project':
+        defaultTasks = [
+          { id: Date.now() + '-1', title: 'Plan', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-2', title: 'Research', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-3', title: 'Implement', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-4', title: 'Test', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-5', title: 'Finalize', completed: false, dueDate: formattedDate },
+        ];
+        break;
+      case 'presentation':
+        defaultTasks = [
+          { id: Date.now() + '-1', title: 'Research', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-2', title: 'Create Slides', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-3', title: 'Prepare Notes', completed: false, dueDate: formattedDate },
+          { id: Date.now() + '-4', title: 'Practice', completed: false, dueDate: formattedDate },
+        ];
+        break;
+      default:
+        break;
+    }
+    
+    setSubTasks(defaultTasks);
+  };
+  
+  // Handle assignment type change
+  const handleTypeChange = (type) => {
+    setAssignmentType(type);
+    
+    // Only generate default subtasks if this is a new task and there are no existing subtasks
+    if (!initialTask && subTasks.length === 0) {
+      generateDefaultSubTasks(type);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -212,19 +278,21 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
                 key={type.value}
                 style={[
                   styles.typeButton,
-                  assignmentType === type.value && styles.activeTypeButton
+                  assignmentType === type.value && styles.activeTypeButton,
+                  SUBTASK_ENABLED_TYPES.includes(type.value) && styles.subtaskEnabledButton
                 ]}
-                onPress={() => setAssignmentType(type.value)}
+                onPress={() => handleTypeChange(type.value)}
               >
                 <Ionicons 
                   name={type.icon} 
                   size={20} 
-                  color={assignmentType === type.value ? COLORS.white : COLORS.primary} 
+                  color={assignmentType === type.value ? COLORS.white : (SUBTASK_ENABLED_TYPES.includes(type.value) ? COLORS.primary : COLORS.gray)} 
                 />
                 <Text 
                   style={[
                     styles.typeText,
-                    assignmentType === type.value && styles.activeTypeText
+                    assignmentType === type.value && styles.activeTypeText,
+                    SUBTASK_ENABLED_TYPES.includes(type.value) && styles.subtaskEnabledText
                   ]}
                 >
                   {type.label}
@@ -377,6 +445,17 @@ const AddTaskForm = ({ onSubmit, onCancel, initialTask = null }) => {
             ))}
           </View>
         </View>
+        
+        {/* Sub-tasks section - only shown for certain assignment types */}
+        {showSubTasks && (
+          <View style={styles.subTasksContainer}>
+            <SubTaskList 
+              subTasks={subTasks} 
+              onChange={handleSubTasksChange}
+              parentDueDate={formatDate(dueDate)}
+            />
+          </View>
+        )}
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>Notes (Optional)</Text>
@@ -525,18 +604,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.gray,
   },
   activeTypeButton: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  subtaskEnabledButton: {
+    borderColor: COLORS.primary,
   },
   typeText: {
     fontSize: 14,
-    color: COLORS.primary,
+    color: COLORS.gray,
     marginLeft: 6,
   },
   activeTypeText: {
     color: COLORS.white,
+  },
+  subtaskEnabledText: {
+    color: COLORS.primary,
   },
   optionButton: {
     flexDirection: 'row',
@@ -753,6 +839,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.white,
     fontWeight: '500',
+  },
+  // Sub-tasks styles
+  subTasksContainer: {
+    backgroundColor: COLORS.lightGray + '30',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
   },
 });
 
