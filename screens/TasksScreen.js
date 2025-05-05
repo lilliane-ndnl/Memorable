@@ -1,791 +1,743 @@
-import React, { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
   FlatList,
   Modal,
+    RefreshControl,
   SafeAreaView,
-  Image,
-  Alert,
   ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { COLORS, SHADOWS } from '../constants/theme';
-import AddTaskForm from '../components/AddTaskForm';
-import { loadTasksFromStorage, saveTasksToStorage, formatDisplayDate } from '../utils/helpers';
-import { loadCoursesFromStorage } from '../utils/courseHelpers';
-import { loadTaskGroupsFromStorage, saveTaskGroupsToStorage } from '../utils/groupHelpers';
+import TaskForm from '../components/TaskForm';
 import TaskItem from '../components/TaskItem';
+import { COLORS, SHADOWS, SIZES } from '../constants/theme';
+import { loadCoursesFromStorage } from '../utils/courseHelpers';
+import {
+    addTask,
+    deleteTask,
+    loadTasksFromStorage,
+    toggleSubTaskCompletion,
+    toggleTaskCompletion,
+    updateTask
+} from '../utils/taskHelpers';
 
-// Icons for assignment types
-const ASSIGNMENT_ICONS = {
-  essay: 'document-text-outline',
-  quiz: 'help-circle-outline',
-  exam: 'school-outline',
-  reading: 'book-outline',
-  project: 'construct-outline',
-  presentation: 'easel-outline',
-  homework: 'create-outline',
-  lab: 'flask-outline',
-  paper: 'newspaper-outline',
-  discussion: 'chatbubbles-outline',
-  other: 'file-tray-outline',
+// Task category filters
+const FILTERS = {
+  ALL: 'all',
+  TODAY: 'today',
+  UPCOMING: 'upcoming',
+  COMPLETED: 'completed',
+  OVERDUE: 'overdue'
 };
 
-// Task type categories for visual hierarchy
-const TASK_CATEGORIES = {
-  LECTURE: ['lecture'],
-  STUDY: ['reading', 'study', 'discussion', 'study-sessions'],
-  ASSESSMENT: ['exam', 'quiz', 'test'],
-  ASSIGNMENT: ['homework', 'essay', 'paper', 'project', 'presentation', 'lab', 'other'],
+// Sort options
+const SORT_TYPES = {
+  DUE_DATE_ASC: 'dueDate-asc',
+  DUE_DATE_DESC: 'dueDate-desc',
+  PRIORITY_HIGH: 'priority-high',
+  PRIORITY_LOW: 'priority-low',
+  ALPHABETICAL: 'alphabetical'
 };
 
-const TasksScreen = () => {
-  const navigation = useNavigation();
+// Group options
+const GROUP_TYPES = {
+  NONE: 'none',
+  COURSE: 'course',
+  PRIORITY: 'priority',
+  CATEGORY: 'category',
+  DUE_DATE: 'dueDate'
+};
+
+const TasksScreen = ({ navigation }) => {
   const [tasks, setTasks] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [courses, setCourses] = useState([]);
-  const [groups, setGroups] = useState([]);
-  const [filter, setFilter] = useState('all'); // 'all', 'today', 'week', 'completed', 'grouped'
-  const [groupFilter, setGroupFilter] = useState(null); // null or groupId
-  const [groupByOption, setGroupByOption] = useState('date'); // 'date', 'course', 'group', 'type'
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentFilter, setCurrentFilter] = useState(FILTERS.ALL);
+  const [currentSort, setCurrentSort] = useState(SORT_TYPES.DUE_DATE_ASC);
+  const [currentGroup, setCurrentGroup] = useState(GROUP_TYPES.NONE);
+  const [groupedTasks, setGroupedTasks] = useState({});
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [showFilters, setShowFilters] = useState(false);
 
+  // Load tasks and courses when the component mounts
   useEffect(() => {
-    loadAllData();
+    loadData();
   }, []);
 
-  // When tasks, filter or grouping option changes, update filtered tasks
+  // Update filtered tasks when tasks change or filters change
   useEffect(() => {
-    filterTasks(filter);
-  }, [tasks, filter, groupByOption, groupFilter]);
+    applyFiltersAndSort();
+  }, [tasks, searchQuery, currentFilter, currentSort, currentGroup]);
 
-  const loadAllData = async () => {
+  // Load data from storage
+  const loadData = async () => {
+    setRefreshing(true);
     const loadedTasks = await loadTasksFromStorage();
     const loadedCourses = await loadCoursesFromStorage();
-    const loadedGroups = await loadTaskGroupsFromStorage();
+    
     setTasks(loadedTasks);
     setCourses(loadedCourses);
-    setGroups(loadedGroups);
+    setRefreshing(false);
   };
 
-  const filterTasks = (filterType) => {
-    setFilter(filterType);
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const nextWeek = new Date(today);
-    nextWeek.setDate(today.getDate() + 7);
-    
+  // Refresh data
+  const handleRefresh = useCallback(() => {
+    loadData();
+  }, []);
+
+  // Apply filters, sorting, and grouping
+  const applyFiltersAndSort = () => {
     let filtered = [...tasks];
     
-    switch (filterType) {
-      case 'today':
-        filtered = tasks.filter(task => {
-          const taskDate = new Date(task.dueDate);
-          taskDate.setHours(0, 0, 0, 0);
-          return taskDate.getTime() === today.getTime();
-        });
-        break;
-      case 'week':
-        filtered = tasks.filter(task => {
-          const taskDate = new Date(task.dueDate);
-          taskDate.setHours(0, 0, 0, 0);
-          return taskDate >= today && taskDate <= nextWeek;
-        });
-        break;
-      case 'completed':
-        filtered = tasks.filter(task => task.completed);
-        break;
-      case 'grouped':
-        // Only show tasks in the selected group
-        if (groupFilter) {
-          const group = groups.find(g => g.id === groupFilter);
-          if (group) {
-            filtered = tasks.filter(task => 
-              group.tasks.includes(task.id)
-            );
-          }
-        }
-        break;
-      case 'all':
-      default:
-        // Already set to all tasks
-        break;
-    }
-    
-    // Sort by due date (ascending)
-    filtered.sort((a, b) => {
-      const dateA = new Date(a.dueDate);
-      const dateB = new Date(b.dueDate);
-      return dateA - dateB;
-    });
-    
-    setFilteredTasks(filtered);
-  };
-
-  const handleAddTask = (taskData) => {
-    const newTask = {
-      id: editingTask?.id || Date.now().toString(),
-      ...taskData,
-      completed: editingTask?.completed || false,
-      type: taskData.type || 'homework',
-      subTasks: taskData.subTasks || [],
-    };
-    
-    if (editingTask) {
-      // Update existing task
-      const updatedTasks = tasks.map(task => 
-        task.id === editingTask.id ? newTask : task
+    // Apply search filter
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        task => task.title.toLowerCase().includes(query) || 
+               (task.description && task.description.toLowerCase().includes(query))
       );
-      setTasks(updatedTasks);
-      saveTasksToStorage(updatedTasks);
-    } else {
-      // Add new task
-      const updatedTasks = [...tasks, newTask];
-      setTasks(updatedTasks);
-      saveTasksToStorage(updatedTasks);
-      
-      // If the task has a group, add it to that group
-      if (newTask.groupId) {
-        updateTaskInGroups(newTask.id, newTask.groupId);
-      }
-      
-      // If we're grouping by course, automatically add to course group
-      if (groupByOption === 'course' && newTask.courseName) {
-        const courseGroup = groups.find(g => g.name === newTask.courseName);
-        if (courseGroup) {
-          updateTaskInGroups(newTask.id, courseGroup.id);
-        } else {
-          // Create a new course group if it doesn't exist
-          createCourseGroup(newTask.courseName, newTask.id);
-        }
-      }
     }
     
-    setModalVisible(false);
-    setEditingTask(null);
-  };
-
-  const updateTaskInGroups = async (taskId, groupId) => {
-    const updatedGroups = [...groups];
-    const groupIndex = updatedGroups.findIndex(g => g.id === groupId);
-    
-    if (groupIndex >= 0) {
-      if (!updatedGroups[groupIndex].tasks.includes(taskId)) {
-        updatedGroups[groupIndex].tasks.push(taskId);
-        setGroups(updatedGroups);
-        await saveTaskGroupsToStorage(updatedGroups);
-      }
-    }
-  };
-  
-  const createCourseGroup = async (courseName, taskId) => {
-    // Find course color
-    const course = courses.find(c => c.name === courseName);
-    const courseColor = course?.color || COLORS.primary;
-    
-    // Create a new group for this course
-    const newGroup = {
-      id: `course-${Date.now().toString()}`,
-      name: courseName,
-      color: courseColor,
-      tasks: [taskId],
-      isDefault: false,
-      isCourseGroup: true,
-    };
-    
-    const updatedGroups = [...groups, newGroup];
-    setGroups(updatedGroups);
-    await saveTaskGroupsToStorage(updatedGroups);
-  };
-
-  const handleToggleComplete = (id) => {
-    const updatedTasks = tasks.map(task => {
-      if (task.id === id) {
-        return { ...task, completed: !task.completed };
-      }
-      return task;
-    });
-    
-    setTasks(updatedTasks);
-    saveTasksToStorage(updatedTasks);
-  };
-
-  const handleToggleSubTaskComplete = (taskId, subTaskId) => {
-    const updatedTasks = tasks.map(task => {
-      if (task.id === taskId && task.subTasks) {
-        // Toggle the subtask completion
-        const updatedSubTasks = task.subTasks.map(subTask => {
-          if (subTask.id === subTaskId) {
-            return { ...subTask, completed: !subTask.completed };
-          }
-          return subTask;
-        });
-        
-        // Calculate if all subtasks are completed
-        const allSubTasksCompleted = updatedSubTasks.every(st => st.completed);
-        
-        // Update the main task completion based on subtasks
-        return { 
-          ...task, 
-          subTasks: updatedSubTasks,
-          completed: allSubTasksCompleted
-        };
-      }
-      return task;
-    });
-    
-    setTasks(updatedTasks);
-    saveTasksToStorage(updatedTasks);
-  };
-
-  const handleEditTask = (task) => {
-    setEditingTask(task);
-    setModalVisible(true);
-  };
-
-  const handleDeleteTask = (id) => {
-    Alert.alert(
-      "Delete Task",
-      "Are you sure you want to delete this task?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          onPress: () => {
-            const updatedTasks = tasks.filter(task => task.id !== id);
-            setTasks(updatedTasks);
-            saveTasksToStorage(updatedTasks);
-            
-            // Also remove the task from any groups
-            const updatedGroups = groups.map(group => ({
-              ...group,
-              tasks: group.tasks.filter(taskId => taskId !== id)
-            }));
-            setGroups(updatedGroups);
-            saveTaskGroupsToStorage(updatedGroups);
-          },
-          style: "destructive"
-        }
-      ]
-    );
-  };
-
-  // Helper to get color for a course
-  const getCourseColor = (courseName) => {
-    const course = courses.find(c => c.name === courseName);
-    return course?.color || COLORS.primary;
-  };
-
-  // Helper to get the right icon for a task
-  const getTaskIcon = (task) => {
-    return ASSIGNMENT_ICONS[task.type] || ASSIGNMENT_ICONS.homework;
-  };
-  
-  // Helper to determine task category for visual hierarchy
-  const getTaskCategory = (task) => {
-    const type = task.type.toLowerCase();
-    
-    for (const [category, types] of Object.entries(TASK_CATEGORIES)) {
-      if (types.includes(type)) {
-        return category;
-      }
-    }
-    
-    // Default to ASSIGNMENT if no match
-    return 'ASSIGNMENT';
-  };
-  
-  // Helper to get category style
-  const getCategoryStyle = (category) => {
-    switch (category) {
-      case 'LECTURE':
-        return styles.lectureTask;
-      case 'STUDY':
-        return styles.studyTask;
-      case 'ASSESSMENT':
-        return styles.assessmentTask;
-      case 'ASSIGNMENT':
-      default:
-        return styles.assignmentTask;
-    }
-  };
-
-  // Group tasks by the selected option
-  const groupTasks = () => {
-    if (filteredTasks.length === 0) {
-      return [];
-    }
-
-    const grouped = {};
-    
-    switch (groupByOption) {
-      case 'course':
-        // Group by course
-        filteredTasks.forEach(task => {
-          const key = task.courseName || 'Uncategorized';
-          if (!grouped[key]) {
-            grouped[key] = [];
-          }
-          grouped[key].push(task);
-        });
+    // Apply category filter
+    switch (currentFilter) {
+      case FILTERS.TODAY:
+        filtered = filtered.filter(task => task.isDueToday());
         break;
-      
-      case 'group':
-        // Group by custom group
-        // First, create an "Ungrouped" category
-        grouped['Ungrouped'] = filteredTasks.filter(task => !task.groupId);
-        
-        // Then add tasks to their respective groups
-        groups.forEach(group => {
-          const groupTasks = filteredTasks.filter(task => 
-            task.groupId === group.id
-          );
+      case FILTERS.UPCOMING:
+        filtered = filtered.filter(task => !task.isCompleted && !task.isOverdue() && !task.isDueToday());
+        break;
+      case FILTERS.COMPLETED:
+        filtered = filtered.filter(task => task.isCompleted);
+        break;
+      case FILTERS.OVERDUE:
+        filtered = filtered.filter(task => task.isOverdue());
+        break;
+      case FILTERS.ALL:
+      default:
+        // No additional filtering
+        break;
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      switch (currentSort) {
+        case SORT_TYPES.DUE_DATE_ASC:
+          // Tasks without due dates at the end
+          if (!a.dueDate && !b.dueDate) return 0;
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return new Date(a.dueDate) - new Date(b.dueDate);
           
-          if (groupTasks.length > 0) {
-            grouped[group.name] = groupTasks;
-          }
-        });
-        break;
-      
-      case 'type':
-        // Group by task type/category
-        filteredTasks.forEach(task => {
-          const category = getTaskCategory(task);
-          if (!grouped[category]) {
-            grouped[category] = [];
-          }
-          grouped[category].push(task);
-        });
-        break;
-      
-      case 'date':
-      default:
-        // Group by due date (default)
-        filteredTasks.forEach(task => {
-          if (!grouped[task.dueDate]) {
-            grouped[task.dueDate] = [];
-          }
-          grouped[task.dueDate].push(task);
-        });
-        break;
-    }
+        case SORT_TYPES.DUE_DATE_DESC:
+          // Tasks without due dates at the end
+          if (!a.dueDate && !b.dueDate) return 0;
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return new Date(b.dueDate) - new Date(a.dueDate);
+          
+        case SORT_TYPES.PRIORITY_HIGH:
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+          
+        case SORT_TYPES.PRIORITY_LOW:
+          const priorityOrderReverse = { high: 2, medium: 1, low: 0 };
+          return priorityOrderReverse[a.priority] - priorityOrderReverse[b.priority];
+          
+        case SORT_TYPES.ALPHABETICAL:
+          return a.title.localeCompare(b.title);
+          
+        default:
+          return 0;
+      }
+    });
     
-    // Convert to array format for FlatList
-    return Object.entries(grouped).map(([label, tasks]) => ({
-      label,
-      tasks,
-      isDate: groupByOption === 'date', // Special case for date formatting
+    // Apply grouping
+    if (currentGroup === GROUP_TYPES.NONE) {
+      setFilteredTasks(filtered);
+      setGroupedTasks({});
+        } else {
+      const groups = {};
+      
+      filtered.forEach(task => {
+        let groupKey;
+        let groupTitle;
+        
+        switch (currentGroup) {
+          case GROUP_TYPES.COURSE:
+            groupKey = task.courseId || 'uncategorized';
+            groupTitle = task.courseName || 'No Course';
+            break;
+          
+          case GROUP_TYPES.PRIORITY:
+            groupKey = task.priority;
+            groupTitle = task.priority.charAt(0).toUpperCase() + task.priority.slice(1) + ' Priority';
+            break;
+          
+          case GROUP_TYPES.CATEGORY:
+            groupKey = task.category;
+            groupTitle = task.category.charAt(0).toUpperCase() + task.category.slice(1);
+            break;
+          
+          case GROUP_TYPES.DUE_DATE:
+            if (!task.dueDate) {
+              groupKey = 'no-date';
+              groupTitle = 'No Due Date';
+            } else if (task.isDueToday()) {
+              groupKey = 'today';
+              groupTitle = 'Today';
+            } else if (task.isOverdue()) {
+              groupKey = 'overdue';
+              groupTitle = 'Overdue';
+            } else {
+              const date = new Date(task.dueDate);
+              groupKey = task.dueDate;
+              groupTitle = date.toLocaleDateString(undefined, { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+              });
+            }
+            break;
+            
+          default:
+            groupKey = 'other';
+            groupTitle = 'Other';
+        }
+        
+        if (!groups[groupKey]) {
+          groups[groupKey] = {
+            title: groupTitle,
+            data: []
+          };
+        }
+        
+        groups[groupKey].data.push(task);
+      });
+      
+      // Sort the groups
+      const sortedGroups = {};
+      
+      if (currentGroup === GROUP_TYPES.DUE_DATE) {
+        // Special sorting for due dates
+        const groupKeys = Object.keys(groups);
+        
+        // Extract dates and sort them
+        const specialKeys = ['overdue', 'today', 'no-date'];
+        const dateKeys = groupKeys.filter(key => !specialKeys.includes(key))
+          .sort((a, b) => new Date(a) - new Date(b));
+        
+        // Special keys order
+        if (groups['overdue']) {
+          sortedGroups['overdue'] = groups['overdue'];
+        }
+        
+        if (groups['today']) {
+          sortedGroups['today'] = groups['today'];
+        }
+        
+        // Add sorted date keys
+        dateKeys.forEach(key => {
+          sortedGroups[key] = groups[key];
+        });
+        
+        // Add "no date" at the end
+        if (groups['no-date']) {
+          sortedGroups['no-date'] = groups['no-date'];
+        }
+      } else if (currentGroup === GROUP_TYPES.PRIORITY) {
+        // Priority order: High, Medium, Low
+        const priorityOrder = ['high', 'medium', 'low'];
+        
+        priorityOrder.forEach(priority => {
+          if (groups[priority]) {
+            sortedGroups[priority] = groups[priority];
+          }
+        });
+      } else {
+        // Alphabetical sorting for other groups
+        Object.keys(groups).sort((a, b) => {
+          if (a === 'uncategorized') return 1;
+          if (b === 'uncategorized') return -1;
+          return groups[a].title.localeCompare(groups[b].title);
+        }).forEach(key => {
+          sortedGroups[key] = groups[key];
+        });
+      }
+      
+      setFilteredTasks([]);
+      setGroupedTasks(sortedGroups);
+      
+      // Initialize expanded state for all groups
+      const initialExpandedState = {};
+      Object.keys(sortedGroups).forEach(key => {
+        initialExpandedState[key] = true; // All groups expanded by default
+      });
+      
+      // Keep existing expanded states when reapplying filters
+      setExpandedGroups(prev => {
+        const newState = { ...initialExpandedState };
+        
+        // Preserve expanded states for groups that still exist
+        Object.keys(prev).forEach(key => {
+          if (newState[key] !== undefined) {
+            newState[key] = prev[key];
+          }
+        });
+        
+        return newState;
+      });
+    }
+  };
+
+  // Toggle group expansion
+  const toggleGroupExpanded = (groupId) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
     }));
   };
 
-  const renderTaskItem = ({ item }) => {
-    const taskItem = item.tasks[0]; // Get the task from the group
-    const courseColor = getCourseColor(taskItem.courseName);
+  // Handle adding a new task
+  const handleAddTask = async (taskData) => {
+    const newTask = await addTask(taskData);
     
-    // If the task has subtasks, use our upgraded TaskItem component
-    if (taskItem.subTasks && taskItem.subTasks.length > 0) {
-      return (
-        <TaskItem
-          task={taskItem}
-          onPress={() => handleEditTask(taskItem)}
-          onToggleComplete={handleToggleComplete}
-          onToggleSubTaskComplete={handleToggleSubTaskComplete}
-          onDelete={handleDeleteTask}
-          courseColor={courseColor}
-          groups={groups}
-        />
-      );
+    if (newTask) {
+      setTasks(prevTasks => [...prevTasks, newTask]);
+      setModalVisible(false);
+      setEditingTask(null);
     }
-    
-    // Otherwise use the existing task item rendering
-    return (
-      <TouchableOpacity
-        style={[
-          styles.taskItem,
-          getCategoryStyle(getTaskCategory(taskItem)),
-          { borderLeftColor: courseColor },
-          taskItem.completed && styles.completedTask
-        ]}
-        onPress={() => handleEditTask(taskItem)}
-      >
-        <TouchableOpacity
-          style={[
-            styles.completeButton,
-            taskItem.completed && styles.completedButton
-          ]}
-          onPress={() => handleToggleComplete(taskItem.id)}
-        >
-          {taskItem.completed && (
-            <Ionicons name="checkmark" size={18} color={COLORS.white} />
-          )}
-        </TouchableOpacity>
-        
-        <View style={styles.taskContent}>
-          <View style={styles.taskHeader}>
-            <Text style={[styles.taskTitle, taskItem.completed && styles.completedText]}>
-              {taskItem.title}
-            </Text>
-            <Ionicons name={getTaskIcon(taskItem)} size={20} color={courseColor} />
-          </View>
-          
-          <View style={styles.taskDetails}>
-            <Text style={styles.courseText}>{taskItem.courseName}</Text>
-            <Text style={styles.timeText}>{taskItem.dueTime}</Text>
-          </View>
-          
-          {/* Show group tag if task is in a group */}
-          {taskItem.groupId && (
-            <View style={styles.taskGroupInfo}>
-              {groups.filter(g => g.id === taskItem.groupId).map(group => (
-                <View 
-                  key={group.id} 
-                  style={[styles.groupTag, { backgroundColor: group.color + '30' }]}
-                >
-                  <Text style={[styles.groupTagText, { color: group.color }]}>
-                    {group.name}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-          
-          {taskItem.notes && (
-            <Text style={styles.notes} numberOfLines={2}>{taskItem.notes}</Text>
-          )}
-        </View>
-        
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteTask(taskItem.id)}
-        >
-          <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    );
   };
 
-  const renderGroupHeader = ({ item }) => (
-    <View style={styles.dateGroup}>
-      <View style={styles.dateHeader}>
-        {item.isDate ? (
-          <Text style={styles.dateText}>{formatDisplayDate(item.label)}</Text>
-        ) : (
-          <Text style={styles.groupHeaderText}>{item.label}</Text>
-        )}
-        <View style={styles.dateLine} />
-      </View>
-      
-      {item.tasks.map(task => (
-        <View key={task.id}>
-          {renderTaskItem({ item: { tasks: [task] } })}
-        </View>
-      ))}
-    </View>
-  );
+  // Handle updating a task
+  const handleUpdateTask = async (taskData) => {
+    const updatedTask = await updateTask(taskData.id, taskData);
+    
+    if (updatedTask) {
+      setTasks(prevTasks => 
+        prevTasks.map(task => task.id === updatedTask.id ? updatedTask : task)
+      );
+      setModalVisible(false);
+      setEditingTask(null);
+    }
+  };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="document-text-outline" size={80} color={COLORS.primary} style={styles.emptyIcon} />
-      <Text style={styles.emptyTitle}>No Tasks Yet</Text>
-      <Text style={styles.emptyText}>
-        Add your homework and assignments to keep track of everything
-      </Text>
-      <TouchableOpacity
-        style={styles.emptyButton}
-        onPress={() => {
-          setEditingTask(null);
+  // Handle toggling task completion
+  const handleToggleTaskCompletion = async (taskId) => {
+    const updatedTask = await toggleTaskCompletion(taskId);
+    
+    if (updatedTask) {
+      setTasks(prevTasks => 
+        prevTasks.map(task => task.id === updatedTask.id ? updatedTask : task)
+      );
+    }
+  };
+
+  // Handle toggling subtask completion
+  const handleToggleSubtaskCompletion = async (taskId, subtaskId) => {
+    const updatedTask = await toggleSubTaskCompletion(taskId, subtaskId);
+    
+    if (updatedTask) {
+      setTasks(prevTasks => 
+        prevTasks.map(task => task.id === updatedTask.id ? updatedTask : task)
+      );
+    }
+  };
+
+  // Handle deleting a task
+  const handleDeleteTask = async (taskId) => {
+    const success = await deleteTask(taskId);
+    
+    if (success) {
+      setTasks(prevTasks => 
+        prevTasks.filter(task => task.id !== taskId)
+      );
+    }
+  };
+
+  // Handle editing a task
+  const handleEditTask = (task) => {
+    setEditingTask(task);
           setModalVisible(true);
-        }}
-      >
-        <Text style={styles.emptyButtonText}>Add Your First Task</Text>
-      </TouchableOpacity>
-    </View>
-  );
-  
-  // Render group filter pills when in "grouped" filter
-  const renderGroupFilters = () => (
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      style={styles.groupFiltersContainer}
-    >
+  };
+
+  // Render a filter button
+  const renderFilterButton = (filter, label, icon) => (
       <TouchableOpacity
         style={[
-          styles.groupFilterPill,
-          !groupFilter && styles.activeGroupFilterPill
-        ]}
-        onPress={() => setGroupFilter(null)}
-      >
-        <Text style={[
-          styles.groupFilterText,
-          !groupFilter && styles.activeGroupFilterText
-        ]}>All Groups</Text>
-      </TouchableOpacity>
-      
-      {groups.map(group => (
-        <TouchableOpacity
-          key={group.id}
+        styles.filterButton,
+        currentFilter === filter && styles.filterButtonActive
+      ]}
+      onPress={() => setCurrentFilter(filter)}
+    >
+      <Ionicons 
+        name={icon} 
+        size={18} 
+        color={currentFilter === filter ? COLORS.white : COLORS.gray} 
+      />
+      <Text 
           style={[
-            styles.groupFilterPill,
-            { borderColor: group.color },
-            groupFilter === group.id && {
-              backgroundColor: group.color + '30',
-              borderColor: group.color,
-            }
-          ]}
-          onPress={() => setGroupFilter(group.id)}
-        >
-          <View style={[styles.colorDot, { backgroundColor: group.color }]} />
-          <Text style={[
-            styles.groupFilterText,
-            groupFilter === group.id && { color: group.color }
-          ]}>{group.name}</Text>
+          styles.filterButtonText,
+          currentFilter === filter && styles.filterButtonTextActive
+        ]}
+      >
+        {label}
+      </Text>
         </TouchableOpacity>
-      ))}
-    </ScrollView>
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Assignments</Text>
+  // Render filter controls
+  const renderFilterControls = () => (
+    <View style={styles.filterControls}>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filtersScrollContent}
+      >
+        {renderFilterButton(FILTERS.ALL, 'All', 'list')}
+        {renderFilterButton(FILTERS.TODAY, 'Today', 'today')}
+        {renderFilterButton(FILTERS.UPCOMING, 'Upcoming', 'calendar')}
+        {renderFilterButton(FILTERS.OVERDUE, 'Overdue', 'alert-circle')}
+        {renderFilterButton(FILTERS.COMPLETED, 'Completed', 'checkmark-circle')}
+      </ScrollView>
+      
+      <View style={styles.sortGroupContainer}>
         <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => {
-            setEditingTask(null);
-            setModalVisible(true);
-          }}
+          style={styles.controlButton}
+          onPress={() => setShowFilters(!showFilters)}
         >
-          <Ionicons name="add" size={24} color={COLORS.white} />
+          <Ionicons name="options-outline" size={20} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
-      
-      <View style={styles.filterContainer}>
+    </View>
+  );
+
+  // Render advanced filter panel
+  const renderAdvancedFilters = () => (
+    <View style={styles.advancedFiltersContainer}>
+      {/* Sort options */}
+      <View style={styles.advancedSection}>
+        <Text style={styles.advancedSectionTitle}>Sort by</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              filter === 'all' && styles.activeFilterButton
+              styles.advancedButton,
+              currentSort === SORT_TYPES.DUE_DATE_ASC && styles.advancedButtonActive
             ]}
-            onPress={() => filterTasks('all')}
+            onPress={() => setCurrentSort(SORT_TYPES.DUE_DATE_ASC)}
           >
-            <Text
-              style={[
-                styles.filterText,
-                filter === 'all' && styles.activeFilterText
-              ]}
-            >
-              All
+            <Text style={currentSort === SORT_TYPES.DUE_DATE_ASC ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Due Date (↑)
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              filter === 'today' && styles.activeFilterButton
+              styles.advancedButton,
+              currentSort === SORT_TYPES.DUE_DATE_DESC && styles.advancedButtonActive
             ]}
-            onPress={() => filterTasks('today')}
+            onPress={() => setCurrentSort(SORT_TYPES.DUE_DATE_DESC)}
           >
-            <Text
-              style={[
-                styles.filterText,
-                filter === 'today' && styles.activeFilterText
-              ]}
-            >
-              Today
+            <Text style={currentSort === SORT_TYPES.DUE_DATE_DESC ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Due Date (↓)
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              filter === 'week' && styles.activeFilterButton
+              styles.advancedButton,
+              currentSort === SORT_TYPES.PRIORITY_HIGH && styles.advancedButtonActive
             ]}
-            onPress={() => filterTasks('week')}
+            onPress={() => setCurrentSort(SORT_TYPES.PRIORITY_HIGH)}
           >
-            <Text
-              style={[
-                styles.filterText,
-                filter === 'week' && styles.activeFilterText
-              ]}
-            >
-              This Week
+            <Text style={currentSort === SORT_TYPES.PRIORITY_HIGH ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Priority (High→Low)
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              filter === 'grouped' && styles.activeFilterButton
+              styles.advancedButton,
+              currentSort === SORT_TYPES.PRIORITY_LOW && styles.advancedButtonActive
             ]}
-            onPress={() => filterTasks('grouped')}
+            onPress={() => setCurrentSort(SORT_TYPES.PRIORITY_LOW)}
           >
-            <Text
-              style={[
-                styles.filterText,
-                filter === 'grouped' && styles.activeFilterText
-              ]}
-            >
-              Groups
+            <Text style={currentSort === SORT_TYPES.PRIORITY_LOW ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Priority (Low→High)
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
-              styles.filterButton,
-              filter === 'completed' && styles.activeFilterButton
+              styles.advancedButton,
+              currentSort === SORT_TYPES.ALPHABETICAL && styles.advancedButtonActive
             ]}
-            onPress={() => filterTasks('completed')}
+            onPress={() => setCurrentSort(SORT_TYPES.ALPHABETICAL)}
           >
-            <Text
-              style={[
-                styles.filterText,
-                filter === 'completed' && styles.activeFilterText
-              ]}
-            >
-              Completed
+            <Text style={currentSort === SORT_TYPES.ALPHABETICAL ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Alphabetical
             </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
       
-      {/* Group by options */}
-      <View style={styles.groupByContainer}>
-        <Text style={styles.groupByLabel}>Group by:</Text>
-        <View style={styles.groupByButtons}>
+      {/* Group options */}
+      <View style={styles.advancedSection}>
+        <Text style={styles.advancedSectionTitle}>Group by</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <TouchableOpacity
             style={[
-              styles.groupByButton,
-              groupByOption === 'date' && styles.activeGroupByButton
+              styles.advancedButton,
+              currentGroup === GROUP_TYPES.NONE && styles.advancedButtonActive
             ]}
-            onPress={() => setGroupByOption('date')}
+            onPress={() => setCurrentGroup(GROUP_TYPES.NONE)}
           >
-            <Ionicons 
-              name="calendar-outline" 
-              size={16} 
-              color={groupByOption === 'date' ? COLORS.white : COLORS.primary} 
-            />
-            <Text 
-              style={[
-                styles.groupByText,
-                groupByOption === 'date' && styles.activeGroupByText
-              ]}
-            >
-              Date
+            <Text style={currentGroup === GROUP_TYPES.NONE ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              None
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
-              styles.groupByButton,
-              groupByOption === 'course' && styles.activeGroupByButton
+              styles.advancedButton,
+              currentGroup === GROUP_TYPES.COURSE && styles.advancedButtonActive
             ]}
-            onPress={() => setGroupByOption('course')}
+            onPress={() => setCurrentGroup(GROUP_TYPES.COURSE)}
           >
-            <Ionicons 
-              name="school-outline" 
-              size={16} 
-              color={groupByOption === 'course' ? COLORS.white : COLORS.primary} 
-            />
-            <Text 
-              style={[
-                styles.groupByText,
-                groupByOption === 'course' && styles.activeGroupByText
-              ]}
-            >
+            <Text style={currentGroup === GROUP_TYPES.COURSE ? styles.advancedButtonTextActive : styles.advancedButtonText}>
               Course
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
-              styles.groupByButton,
-              groupByOption === 'group' && styles.activeGroupByButton
+              styles.advancedButton,
+              currentGroup === GROUP_TYPES.CATEGORY && styles.advancedButtonActive
             ]}
-            onPress={() => setGroupByOption('group')}
+            onPress={() => setCurrentGroup(GROUP_TYPES.CATEGORY)}
           >
-            <Ionicons 
-              name="folder-outline" 
-              size={16} 
-              color={groupByOption === 'group' ? COLORS.white : COLORS.primary} 
-            />
-            <Text 
+            <Text style={currentGroup === GROUP_TYPES.CATEGORY ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Category
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
               style={[
-                styles.groupByText,
-                groupByOption === 'group' && styles.activeGroupByText
+              styles.advancedButton,
+              currentGroup === GROUP_TYPES.PRIORITY && styles.advancedButtonActive
               ]}
+            onPress={() => setCurrentGroup(GROUP_TYPES.PRIORITY)}
             >
-              Group
+            <Text style={currentGroup === GROUP_TYPES.PRIORITY ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Priority
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
-              styles.groupByButton,
-              groupByOption === 'type' && styles.activeGroupByButton
+              styles.advancedButton,
+              currentGroup === GROUP_TYPES.DUE_DATE && styles.advancedButtonActive
             ]}
-            onPress={() => setGroupByOption('type')}
+            onPress={() => setCurrentGroup(GROUP_TYPES.DUE_DATE)}
           >
-            <Ionicons 
-              name="apps-outline" 
-              size={16} 
-              color={groupByOption === 'type' ? COLORS.white : COLORS.primary} 
-            />
-            <Text 
-              style={[
-                styles.groupByText,
-                groupByOption === 'type' && styles.activeGroupByText
-              ]}
-            >
-              Type
+            <Text style={currentGroup === GROUP_TYPES.DUE_DATE ? styles.advancedButtonTextActive : styles.advancedButtonText}>
+              Due Date
             </Text>
           </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  // Render a task item
+  const renderTaskItem = ({ item }) => (
+    <TaskItem
+      task={item}
+      onPress={() => handleEditTask(item)}
+      onToggleComplete={handleToggleTaskCompletion}
+      onToggleSubtask={handleToggleSubtaskCompletion}
+      onDelete={handleDeleteTask}
+      style={styles.taskItem}
+    />
+  );
+
+  // Render a group header
+  const renderGroupHeader = (title, groupId, count) => (
+    <TouchableOpacity 
+      style={styles.groupHeader} 
+      onPress={() => toggleGroupExpanded(groupId)}
+    >
+      <View style={styles.groupTitleContainer}>
+        <Text style={styles.groupTitle}>{title}</Text>
+        <Text style={styles.groupCount}>{count}</Text>
+      </View>
+      
+      <Ionicons 
+        name={expandedGroups[groupId] ? 'chevron-up' : 'chevron-down'} 
+        size={20} 
+        color={COLORS.gray} 
+      />
+    </TouchableOpacity>
+  );
+
+  // Render the task list content
+  const renderContent = () => {
+    // If no tasks exist
+    if (tasks.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="clipboard-outline" size={72} color={COLORS.lightGray} />
+          <Text style={styles.emptyTitle}>No Tasks Yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Add tasks to stay organized and track your assignments
+            </Text>
+          <TouchableOpacity 
+            style={styles.emptyButton}
+            onPress={() => {
+              setEditingTask(null);
+              setModalVisible(true);
+            }}
+          >
+            <Text style={styles.emptyButtonText}>Create First Task</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    // If filtered tasks list is empty after applying filters
+    if (filteredTasks.length === 0 && Object.keys(groupedTasks).length === 0) {
+      return (
+        <View style={styles.noResultsContainer}>
+          <Ionicons name="search-outline" size={48} color={COLORS.lightGray} />
+          <Text style={styles.noResultsTitle}>No Tasks Found</Text>
+          <Text style={styles.noResultsSubtitle}>
+            Try changing your filters or search query
+          </Text>
+      </View>
+      );
+    }
+    
+    // Render grouped tasks
+    if (Object.keys(groupedTasks).length > 0) {
+      return (
+        <View style={styles.groupedList}>
+          {Object.entries(groupedTasks).map(([groupId, group]) => (
+            <View key={groupId} style={styles.groupContainer}>
+              {renderGroupHeader(group.title, groupId, group.data.length)}
+              
+              {expandedGroups[groupId] && (
+                <View style={styles.groupContent}>
+                  {group.data.map(task => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      onPress={() => handleEditTask(task)}
+                      onToggleComplete={handleToggleTaskCompletion}
+                      onToggleSubtask={handleToggleSubtaskCompletion}
+                      onDelete={handleDeleteTask}
+                      style={styles.taskItem}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
+      );
+    }
+    
+    // Render flat list of tasks
+    return (
+        <FlatList
+        data={filteredTasks}
+        keyExtractor={(item) => item.id}
+        renderItem={renderTaskItem}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
+        contentContainerStyle={styles.listContent}
+      />
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Tasks</Text>
+        
+        {/* Search bar */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={COLORS.gray} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search tasks..."
+            placeholderTextColor={COLORS.gray}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.trim() !== '' && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={COLORS.gray} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
       
-      {/* Group filters (only shown when filter is "grouped") */}
-      {filter === 'grouped' && renderGroupFilters()}
+      {/* Filters */}
+      {renderFilterControls()}
       
-      {filteredTasks.length === 0 ? (
-        renderEmptyState()
-      ) : (
-        <FlatList
-          data={groupTasks()}
-          keyExtractor={(item) => item.label}
-          renderItem={renderGroupHeader}
-          contentContainerStyle={styles.list}
-        />
-      )}
+      {/* Advanced filters */}
+      {showFilters && renderAdvancedFilters()}
       
-      {/* Add/Edit Task Modal */}
+      {/* Task list */}
+      <View style={styles.content}>
+        {renderContent()}
+      </View>
+      
+      {/* Add task button */}
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => {
+          setEditingTask(null);
+          setModalVisible(true);
+        }}
+      >
+        <Ionicons name="add" size={24} color={COLORS.white} />
+      </TouchableOpacity>
+      
+      {/* Task form modal */}
       <Modal
         visible={modalVisible}
-        transparent={true}
         animationType="slide"
+        transparent={false}
         onRequestClose={() => {
           setModalVisible(false);
           setEditingTask(null);
         }}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <AddTaskForm 
-              onSubmit={handleAddTask} 
+        <SafeAreaView style={styles.modalContainer}>
+          <TaskForm
+            initialTask={editingTask}
+            onSubmit={editingTask ? handleUpdateTask : handleAddTask}
               onCancel={() => {
                 setModalVisible(false);
                 setEditingTask(null);
               }}
-              initialTask={editingTask}
             />
-          </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -797,305 +749,233 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: COLORS.black,
-  },
-  addButton: {
-    backgroundColor: COLORS.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    padding: 20,
     ...SHADOWS.light,
   },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 10,
-    backgroundColor: COLORS.lightGray,
-  },
-  activeFilterButton: {
-    backgroundColor: COLORS.primary,
-  },
-  filterText: {
-    fontSize: 14,
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
     color: COLORS.text,
-  },
-  activeFilterText: {
-    color: COLORS.white,
-    fontWeight: '500',
-  },
-  list: {
-    padding: 16,
-  },
-  dateGroup: {
     marginBottom: 20,
+    textAlign: 'center',
   },
-  dateHeader: {
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-  },
-  dateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.primary,
-    marginRight: 10,
-  },
-  groupHeaderText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginRight: 10,
-  },
-  dateLine: {
-    flex: 1,
-    height: 1,
     backgroundColor: COLORS.lightGray,
+    borderRadius: SIZES.buttonRadius,
+    paddingHorizontal: 15,
+    height: 48,
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
   },
-  taskItem: {
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: COLORS.text,
+    height: '100%',
+  },
+  filterControls: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderLeftWidth: 4,
-    ...SHADOWS.light,
-  },
-  completedTask: {
-    backgroundColor: COLORS.lightGray + '50',
-    borderLeftWidth: 0,
-  },
-  taskContent: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  taskHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  taskTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
-    flex: 1,
-    marginRight: 10,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
-    color: COLORS.gray,
-  },
-  taskDetails: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  courseText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    marginRight: 12,
-  },
-  timeText: {
-    fontSize: 14,
-    color: COLORS.gray,
-  },
-  notes: {
-    fontSize: 13,
-    color: COLORS.gray,
-    fontStyle: 'italic',
-  },
-  completeButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  completedButton: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
-  },
-  deleteButton: {
-    padding: 8,
-    marginLeft: 10,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 30,
-  },
-  emptyIcon: {
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 10,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: COLORS.gray,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  emptyButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    ...SHADOWS.light,
-  },
-  emptyButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    marginTop: 50,
-    ...SHADOWS.dark,
-  },
-  // Group by styles
-  groupByContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: 8,
     paddingHorizontal: 16,
-    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
   },
-  groupByLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.gray,
-    marginRight: 10,
+  filtersScrollContent: {
+    paddingRight: 16,
+    flexGrow: 1,
   },
-  groupByButtons: {
-    flexDirection: 'row',
-    flex: 1,
-  },
-  groupByButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  activeGroupByButton: {
-    backgroundColor: COLORS.primary,
-  },
-  groupByText: {
-    fontSize: 12,
-    color: COLORS.primary,
-    marginLeft: 4,
-  },
-  activeGroupByText: {
-    color: COLORS.white,
-  },
-  // Task category styles for visual hierarchy
-  lectureTask: {
-    borderRightWidth: 4,
-    borderRightColor: '#9C27B0', // Purple for lectures
-  },
-  studyTask: {
-    borderRightWidth: 4,
-    borderRightColor: '#009688', // Teal for study sessions
-  },
-  assessmentTask: {
-    borderRightWidth: 4,
-    borderRightColor: '#F44336', // Red for assessments
-  },
-  assignmentTask: {
-    // Default style (no additional styling needed)
-  },
-  // Group tag styles
-  taskGroupInfo: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 4,
-    marginBottom: 4,
-  },
-  groupTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginRight: 6,
-    marginBottom: 4,
-  },
-  groupTagText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  // Group filter styles
-  groupFiltersContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-  },
-  groupFilterPill: {
+  filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     marginRight: 8,
-    borderWidth: 1,
-    borderColor: COLORS.gray,
+    backgroundColor: COLORS.lightGray,
   },
-  activeGroupFilterPill: {
+  filterButtonActive: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
   },
-  groupFilterText: {
-    fontSize: 12,
-    color: COLORS.text,
+  filterButtonText: {
+    fontSize: 14,
+    color: COLORS.gray,
+    fontWeight: '500',
+    marginLeft: 4,
   },
-  activeGroupFilterText: {
+  filterButtonTextActive: {
     color: COLORS.white,
   },
-  colorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
+  sortGroupContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  controlButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.lightGray,
+  },
+  content: {
+    flex: 1,
+    paddingTop: 16,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+  },
+  taskItem: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  addButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.dark,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  advancedFiltersContainer: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  advancedSection: {
+    marginBottom: 8,
+  },
+  advancedSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  advancedButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    backgroundColor: COLORS.lightGray,
+    marginBottom: 4,
+  },
+  advancedButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  advancedButtonText: {
+    fontSize: 14,
+    color: COLORS.gray,
+  },
+  advancedButtonTextActive: {
+    color: COLORS.white,
+  },
+  groupedList: {
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+  },
+  groupContainer: {
+    marginBottom: 16,
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: SIZES.buttonRadius,
+    ...SHADOWS.light,
+  },
+  groupTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  groupTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  groupCount: {
+    fontSize: 14,
+    color: COLORS.gray,
+    marginLeft: 8,
+    backgroundColor: COLORS.lightGray,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  groupContent: {
+    marginTop: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: COLORS.gray,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 24,
+    maxWidth: 300,
+  },
+  emptyButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: SIZES.buttonRadius,
+    ...SHADOWS.medium,
+  },
+  emptyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  noResultsContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  noResultsTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 16,
+  },
+  noResultsSubtitle: {
+    fontSize: 16,
+    color: COLORS.gray,
+    textAlign: 'center',
+    marginTop: 8,
+    maxWidth: 300,
   },
 });
 

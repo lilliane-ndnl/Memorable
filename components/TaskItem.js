@@ -1,398 +1,442 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  ProgressBar,
+    Animated,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, SIZES } from '../constants/theme';
-import { COURSE_COLORS } from '../constants/theme';
+import SubTaskList from './SubTaskList';
 
-const ASSIGNMENT_ICONS = {
-  essay: 'document-text-outline',
-  quiz: 'help-circle-outline',
-  exam: 'school-outline',
-  reading: 'book-outline',
-  project: 'construct-outline',
-  presentation: 'easel-outline',
-  homework: 'create-outline',
-  lab: 'flask-outline',
-  paper: 'newspaper-outline',
-  discussion: 'chatbubbles-outline',
-  other: 'file-tray-outline',
-};
-
-// Task type categories for visual hierarchy
-const TASK_CATEGORIES = {
-  LECTURE: ['lecture'],
-  STUDY: ['reading', 'study', 'discussion', 'study-sessions'],
-  ASSESSMENT: ['exam', 'quiz', 'test'],
-  ASSIGNMENT: ['homework', 'essay', 'paper', 'project', 'presentation', 'lab', 'other'],
-};
-
-const TaskItem = ({ 
-  task, 
-  onPress, 
-  onToggleComplete, 
-  onToggleSubTaskComplete,
-  onDelete, 
-  courseColor,
-  groups = []
+const TaskItem = ({
+  task,
+  onPress,
+  onToggleComplete,
+  onToggleSubtask,
+  onDelete,
+  style
 }) => {
   const [expanded, setExpanded] = useState(false);
-  
-  // Get the right icon for a task
-  const getTaskIcon = (taskType) => {
-    return ASSIGNMENT_ICONS[taskType] || ASSIGNMENT_ICONS.homework;
-  };
-  
-  // Determine task category for visual hierarchy
-  const getTaskCategory = (task) => {
-    const type = task.type.toLowerCase();
+  const [animation] = useState(new Animated.Value(0));
+
+  // Toggle expanded state with animation
+  const toggleExpand = () => {
+    const toValue = expanded ? 0 : 1;
     
-    for (const [category, types] of Object.entries(TASK_CATEGORIES)) {
-      if (types.includes(type)) {
-        return category;
-      }
-    }
+    Animated.timing(animation, {
+      toValue,
+      duration: 300,
+      useNativeDriver: false
+    }).start();
     
-    // Default to ASSIGNMENT if no match
-    return 'ASSIGNMENT';
-  };
-  
-  // Get category style
-  const getCategoryStyle = (category) => {
-    switch (category) {
-      case 'LECTURE':
-        return styles.lectureTask;
-      case 'STUDY':
-        return styles.studyTask;
-      case 'ASSESSMENT':
-        return styles.assessmentTask;
-      case 'ASSIGNMENT':
-      default:
-        return styles.assignmentTask;
-    }
+    setExpanded(!expanded);
   };
 
-  // Calculate completion percentage for subtasks
-  const getCompletionPercentage = () => {
-    if (!task.subTasks || task.subTasks.length === 0) {
-      return task.completed ? 100 : 0;
+  // Animated height for the expanded content
+  const expandHeight = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, task.subTasks && task.subTasks.length > 0 ? task.subTasks.length * 50 + 10 : 50]
+  });
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Format time for display
+  const formatTime = (timeString) => {
+    if (!timeString) return '';
+    
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    
+    return date.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Get the task deadline text
+  const getDeadlineText = () => {
+    if (!task.dueDate) return 'No deadline';
+
+    let text = formatDate(task.dueDate);
+    
+    if (task.dueTime) {
+      text += ` at ${formatTime(task.dueTime)}`;
     }
     
-    const completedCount = task.subTasks.filter(subTask => subTask.completed).length;
-    return Math.round((completedCount / task.subTasks.length) * 100);
+    return text;
   };
-  
-  // Handle subtask toggle
-  const handleSubTaskToggle = (subTaskId) => {
-    if (onToggleSubTaskComplete) {
-      onToggleSubTaskComplete(task.id, subTaskId);
+
+  // Get status badge type and text
+  const getStatusBadge = () => {
+    if (task.isCompleted) {
+      return {
+        text: 'Completed',
+        color: COLORS.success,
+        icon: 'checkmark-circle'
+      };
     }
+    
+    if (task.isOverdue()) {
+      return {
+        text: 'Overdue',
+        color: COLORS.danger,
+        icon: 'alert-circle'
+      };
+    }
+    
+    if (task.isDueToday()) {
+      return {
+        text: 'Due Today',
+        color: '#FFA500', // Orange
+        icon: 'time'
+      };
+    }
+    
+    if (task.isDueSoon()) {
+      return {
+        text: 'Due Soon',
+        color: '#FF9800', // Amber
+        icon: 'time'
+      };
+    }
+    
+    return {
+      text: 'Upcoming',
+      color: COLORS.primary,
+      icon: 'calendar'
+    };
   };
-  
-  const completionPercentage = getCompletionPercentage();
+
+  const statusBadge = getStatusBadge();
+  const completionPercentage = task.getCompletionPercentage();
   const hasSubTasks = task.subTasks && task.subTasks.length > 0;
-  const taskCategory = getTaskCategory(task);
-  const categoryStyle = getCategoryStyle(taskCategory);
-  
-  // Find the group this task belongs to
-  const taskGroup = groups.find(group => group.id === task.groupId);
   
   return (
-    <View>
-      <TouchableOpacity
-        style={[
-          styles.taskItem,
-          categoryStyle,
-          { borderLeftColor: courseColor },
-          task.completed && styles.completedTask
-        ]}
-        onPress={onPress}
-      >
+    <View style={[styles.container, style]}>
+      {/* Task header - always visible */}
+      <View style={styles.header}>
+        {/* Checkbox */}
         <TouchableOpacity
           style={[
-            styles.completeButton,
-            task.completed && styles.completedButton
+            styles.checkbox,
+            task.isCompleted && styles.checkboxChecked
           ]}
           onPress={() => onToggleComplete(task.id)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          {task.completed && (
+          {task.isCompleted && (
             <Ionicons name="checkmark" size={18} color={COLORS.white} />
           )}
         </TouchableOpacity>
         
-        <View style={styles.taskContent}>
-          <View style={styles.taskHeader}>
-            <Text style={[styles.taskTitle, task.completed && styles.completedText]}>
+        {/* Task info */}
+        <TouchableOpacity 
+          style={styles.infoContainer} 
+          onPress={onPress}
+          activeOpacity={0.7}
+        >
+          <View style={styles.titleRow}>
+            <Text 
+              style={[
+                styles.title, 
+                task.isCompleted && styles.completedTitle
+              ]}
+              numberOfLines={1}
+            >
               {task.title}
             </Text>
-            <Ionicons name={getTaskIcon(task.type)} size={20} color={courseColor} />
+            
+            {/* Priority indicator */}
+            <View 
+              style={[
+                styles.priorityIndicator, 
+                { backgroundColor: task.getPriorityColor() }
+              ]} 
+            />
           </View>
           
-          <View style={styles.taskDetails}>
-            <Text style={styles.courseText}>{task.courseName}</Text>
-            <Text style={styles.timeText}>{task.dueTime}</Text>
-          </View>
-          
-          {/* Show group tag if task is in a group */}
-          {taskGroup && (
-            <View style={styles.taskGroupInfo}>
-              <View 
-                style={[styles.groupTag, { backgroundColor: taskGroup.color + '30' }]}
-              >
-                <Text style={[styles.groupTagText, { color: taskGroup.color }]}>
-                  {taskGroup.name}
-                </Text>
-              </View>
-            </View>
-          )}
-          
-          {/* Show subtask progress if the task has subtasks */}
-          {hasSubTasks && (
-            <View style={styles.subtaskProgress}>
-              <View style={styles.progressBarContainer}>
-                <View style={styles.progressBarTrack}>
-                  <View 
-                    style={[
-                      styles.progressBarFill, 
-                      { width: `${completionPercentage}%` },
-                      completionPercentage === 100 && styles.progressComplete
-                    ]} 
-                  />
-                </View>
-                <Text style={styles.progressText}>{completionPercentage}%</Text>
-              </View>
-              
-              <TouchableOpacity 
-                style={styles.expandButton}
-                onPress={() => setExpanded(!expanded)}
-              >
-                <Ionicons 
-                  name={expanded ? 'chevron-up' : 'chevron-down'} 
-                  size={16} 
-                  color={COLORS.gray} 
-                />
-              </TouchableOpacity>
-            </View>
-          )}
-          
-          {task.notes && (
-            <Text style={styles.notes} numberOfLines={2}>{task.notes}</Text>
-          )}
-        </View>
-        
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => onDelete(task.id)}
-        >
-          <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
-        </TouchableOpacity>
-      </TouchableOpacity>
-      
-      {/* Expanded subtasks */}
-      {expanded && hasSubTasks && (
-        <View style={styles.subtaskList}>
-          {task.subTasks.map(subtask => (
-            <View key={subtask.id} style={styles.subtaskItem}>
-              <TouchableOpacity
-                style={styles.subtaskToggle}
-                onPress={() => handleSubTaskToggle(subtask.id)}
-              >
-                <Ionicons 
-                  name={subtask.completed ? 'checkmark-circle' : 'ellipse-outline'} 
-                  size={16} 
-                  color={subtask.completed ? COLORS.success : COLORS.gray} 
-                />
-              </TouchableOpacity>
-              <Text 
-                style={[
-                  styles.subtaskTitle,
-                  subtask.completed && styles.completedText
-                ]}
-              >
-                {subtask.title}
+          <View style={styles.metaRow}>
+            {/* Category badge */}
+            <View style={styles.categoryBadge}>
+              <Ionicons 
+                name={task.getCategoryIconName()} 
+                size={12} 
+                color={COLORS.primary} 
+                style={styles.categoryIcon} 
+              />
+              <Text style={styles.categoryText}>
+                {task.category.charAt(0).toUpperCase() + task.category.slice(1)}
               </Text>
             </View>
-          ))}
+            
+            {/* Deadline */}
+            {task.dueDate && (
+              <View style={styles.deadlineBadge}>
+                <Ionicons 
+                  name="calendar-outline" 
+                  size={12} 
+                  color={COLORS.gray} 
+                  style={styles.deadlineIcon} 
+                />
+                <Text style={styles.deadlineText}>
+                  {getDeadlineText()}
+                </Text>
+              </View>
+            )}
+            
+            {/* Course badge */}
+            {task.courseName && (
+              <View style={styles.courseBadge}>
+                <Ionicons 
+                  name="school-outline" 
+                  size={12} 
+                  color={COLORS.gray} 
+                  style={styles.courseIcon} 
+                />
+                <Text style={styles.courseText} numberOfLines={1}>
+                  {task.courseName}
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          {/* Status badge */}
+          <View style={[styles.statusBadge, { backgroundColor: statusBadge.color + '20' }]}>
+            <Ionicons name={statusBadge.icon} size={12} color={statusBadge.color} style={styles.statusIcon} />
+            <Text style={[styles.statusText, { color: statusBadge.color }]}>{statusBadge.text}</Text>
+          </View>
+          
+          {/* Progress bar for sub-tasks */}
+          {hasSubTasks && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { width: `${completionPercentage}%` }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.progressText}>{`${completionPercentage}%`}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        
+        {/* Action buttons */}
+        <View style={styles.actionsContainer}>
+          {hasSubTasks && (
+            <TouchableOpacity
+              style={styles.expandButton}
+              onPress={toggleExpand}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons 
+                name={expanded ? 'chevron-up' : 'chevron-down'} 
+                size={20} 
+                color={COLORS.gray} 
+              />
+            </TouchableOpacity>
+          )}
+          
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => onDelete(task.id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="trash-outline" size={18} color={COLORS.gray} />
+          </TouchableOpacity>
         </View>
+      </View>
+      
+      {/* Expandable content */}
+      {hasSubTasks && (
+        <Animated.View style={[styles.expandContent, { height: expandHeight }]}>
+          <SubTaskList 
+            subTasks={task.subTasks} 
+            onToggle={(subTaskId) => onToggleSubtask(task.id, subTaskId)} 
+          />
+        </Animated.View>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  taskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  container: {
+    borderRadius: SIZES.buttonRadius,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderLeftWidth: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
     ...SHADOWS.light,
   },
-  completedTask: {
-    backgroundColor: COLORS.lightGray + '50',
-    borderLeftWidth: 0,
-  },
-  taskContent: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  taskHeader: {
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    padding: 16,
   },
-  taskTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
-    flex: 1,
-    marginRight: 10,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
-    color: COLORS.gray,
-  },
-  taskDetails: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  courseText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    marginRight: 12,
-  },
-  timeText: {
-    fontSize: 14,
-    color: COLORS.gray,
-  },
-  notes: {
-    fontSize: 13,
-    color: COLORS.gray,
-    fontStyle: 'italic',
-  },
-  completeButton: {
+  checkbox: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: COLORS.primary,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
   },
-  completedButton: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
+  checkboxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
-  deleteButton: {
-    padding: 8,
-    marginLeft: 10,
+  infoContainer: {
+    flex: 1,
+    marginRight: 8,
   },
-  // Task category styles for visual hierarchy
-  lectureTask: {
-    borderRightWidth: 4,
-    borderRightColor: '#9C27B0', // Purple for lectures
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  studyTask: {
-    borderRightWidth: 4,
-    borderRightColor: '#009688', // Teal for study sessions
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginRight: 8,
+    flex: 1,
   },
-  assessmentTask: {
-    borderRightWidth: 4,
-    borderRightColor: '#F44336', // Red for assessments
+  completedTitle: {
+    textDecorationLine: 'line-through',
+    color: COLORS.gray,
   },
-  assignmentTask: {
-    // Default style (no additional styling needed)
+  priorityIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
-  // Group tag styles
-  taskGroupInfo: {
+  metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 4,
-    marginBottom: 4,
+    alignItems: 'center',
+    marginBottom: 6,
   },
-  groupTag: {
-    paddingHorizontal: 8,
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.secondary,
     paddingVertical: 2,
-    borderRadius: 4,
-    marginRight: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    marginRight: 8,
     marginBottom: 4,
   },
-  groupTagText: {
+  categoryIcon: {
+    marginRight: 4,
+  },
+  categoryText: {
     fontSize: 12,
+    color: COLORS.primary,
     fontWeight: '500',
   },
-  // Subtask progress styles
-  subtaskProgress: {
+  deadlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginVertical: 6,
-  },
-  progressBarContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressBarTrack: {
-    height: 6,
-    flex: 1,
     backgroundColor: COLORS.lightGray,
-    borderRadius: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  deadlineIcon: {
+    marginRight: 4,
+  },
+  deadlineText: {
+    fontSize: 12,
+    color: COLORS.gray,
+  },
+  courseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.lightGray,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    marginBottom: 4,
+    maxWidth: 120,
+  },
+  courseIcon: {
+    marginRight: 4,
+  },
+  courseText: {
+    fontSize: 12,
+    color: COLORS.gray,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  statusIcon: {
+    marginRight: 4,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  progressBar: {
+    flex: 1,
+    height: 4,
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 2,
     overflow: 'hidden',
     marginRight: 8,
   },
-  progressBarFill: {
+  progressFill: {
     height: '100%',
     backgroundColor: COLORS.primary,
-  },
-  progressComplete: {
-    backgroundColor: COLORS.success,
   },
   progressText: {
     fontSize: 12,
     color: COLORS.gray,
-    width: 36,
+    width: 35,
+    textAlign: 'right',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   expandButton: {
     padding: 4,
+    marginRight: 8,
   },
-  // Subtask list styles
-  subtaskList: {
-    backgroundColor: COLORS.lightGray + '30',
-    borderRadius: 8,
-    marginTop: -5,
-    marginBottom: 10,
-    marginLeft: 20,
-    padding: 10,
-    paddingTop: 15,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-  },
-  subtaskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray + '70',
-  },
-  subtaskToggle: {
+  deleteButton: {
     padding: 4,
-    marginRight: 4,
   },
-  subtaskTitle: {
-    fontSize: 14,
-    color: COLORS.text,
-    marginLeft: 4,
-    flex: 1,
+  expandContent: {
+    overflow: 'hidden',
+    paddingHorizontal: 16,
   },
 });
 
